@@ -7,6 +7,7 @@ struct ContentView: View {
     @StateObject private var manager = DownloadManager()
     @StateObject private var updateChecker = UpdateChecker()
     @State private var updateGlow = false
+    @State private var hoveringVersion = false
     @State private var launchSoundPlayer: AVAudioPlayer?
     @State private var shareAnchorView: NSView?
 
@@ -24,6 +25,7 @@ struct ContentView: View {
                                                                  // language changes anywhere in the app.
 
     @State private var urlString = ""
+    @State private var lastSeenPasteboardChange = -1
     enum ErrorReportStatus: Equatable { case idle, sending, sent, failed }
     @State private var errorReportStatus: ErrorReportStatus = .idle
     @State private var lastErrorReportNumber: Int?
@@ -134,6 +136,7 @@ struct ContentView: View {
 
     private var canDownload: Bool {
         isPlausibleURL
+        && updateChecker.installState == .idle
         && manager.toolsReady
         && !manager.isRunning
         && !manager.isProbing
@@ -161,20 +164,21 @@ struct ContentView: View {
                 qualityHeight = 0
             }
             manager.refreshTools()
+            manager.autoUpdateToolsIfDue()
             if appearance == "auto" {
                 appearance = Self.systemIsDark() ? "dark" : "light"
             }
             applyAppearance()
             updateChecker.check()
             playLaunchSound()
-            fillURLFromClipboardIfEmpty()
+            fillURLFromClipboard()
             DispatchQueue.main.async {
                 runLaunchWindowSequenceWhenActive()
             }
         }
         .onChange(of: appearance) { _ in applyAppearance() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            fillURLFromClipboardIfEmpty()
+            fillURLFromClipboard()
             updateChecker.check()
         }
         .onChange(of: manager.progress) { _ in updateDockProgress() }
@@ -230,6 +234,14 @@ struct ContentView: View {
 
     private func runLaunchWindowSequenceNow() {
         applyInitialWindowSizeIfNeeded()
+        if let result = updateChecker.takeLaunchResult() {
+            UpdatePanel.shared.show(result, onClosed: { continueLaunchWindowSequence() })
+        } else {
+            continueLaunchWindowSequence()
+        }
+    }
+
+    private func continueLaunchWindowSequence() {
         if LanguagePickerPanel.shouldShowOnLaunch {
             LanguagePickerPanel.shared.show(onDismiss: { showWhatsNewIfNeeded() })
         } else {
@@ -306,25 +318,34 @@ struct ContentView: View {
     /// silently burning its one chance.
     private func showWhatsNewIfNeeded() {
         guard let version = Self.appVersionString, version != lastSeenChangelogVersion,
-              let items = Self.changelog[version]
+              Self.changelog[version] != nil
         else { return }
-        WhatsNewPanel.shared.show(version: version, items: items, onAcknowledge: {
+        WhatsNewPanel.shared.show(version: version, closeTitle: tr("Круто"), onAcknowledge: {
             lastSeenChangelogVersion = version
         })
     }
 
-    /// If the field is empty and the clipboard holds something that looks
-    /// like a video URL, drop it in — saves friends a manual paste.
-    private func fillURLFromClipboardIfEmpty() {
-        guard urlString.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+    /// Drops a link from the clipboard into the field: always when the
+    /// clipboard has changed since we last looked (so a freshly copied link
+    /// replaces the previous one), and, as before, when the field is empty.
+    /// An unchanged clipboard never overwrites what's already typed.
+    private func fillURLFromClipboard() {
+        guard !manager.isRunning else { return }
         let pasteboard = NSPasteboard.general
+        let clipboardIsNew = pasteboard.changeCount != lastSeenPasteboardChange
+        lastSeenPasteboardChange = pasteboard.changeCount
+
+        let fieldIsEmpty = urlString.trimmingCharacters(in: .whitespaces).isEmpty
+        guard clipboardIsNew || fieldIsEmpty else { return }
+
         // Copying an image (e.g. "Copy Image" in a browser) often also puts
         // the image's own URL on the pasteboard as plain text — that's not
         // a video link, so skip auto-fill entirely when there's image data.
         guard !pasteboard.canReadItem(withDataConformingToTypes: ["public.image"]) else { return }
         guard let clip = pasteboard.string(forType: .string)?
                 .trimmingCharacters(in: .whitespacesAndNewlines),
-              Self.isPlausibleURLString(clip)
+              Self.isPlausibleURLString(clip),
+              clip != urlString
         else { return }
         urlString = clip
     }
@@ -348,7 +369,15 @@ struct ContentView: View {
 
     /// Shown once, the first time a given version launches. Add a new entry
     /// with every release that has user-visible changes.
-    private static let changelog: [String: [String]] = [
+    static let changelog: [String: [String]] = [
+        "2.1": [
+            "Обновление программы теперь одной кнопкой (наконец-то).",
+            "Встроенный загрузчик обновляется сам.",
+            "История скачиваний.",
+            "Поправлен баг – новая скопированная ссылка теперь сама заменяет старую.",
+            "Анонимные отчёты о сбоях теперь автоматические (отключаются в «Дополнительно»).",
+            "Мелкие внутренние улучшения и исправления.",
+        ],
         "2.0": [
             "Отдельные кнопки «Скачать видео» и «Скачать звук» вместо одной галочки.",
             "Новая галочка «Скачать видео без звука».",
@@ -377,9 +406,20 @@ struct ContentView: View {
                     Text("VideoDownloader")
                         .font(.title2.bold())
                     if let version = Self.appVersionString {
-                        Text("(v.\(version))")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
+                        Button {
+                            WhatsNewPanel.shared.show(version: version, closeTitle: tr("Закрыть"), onAcknowledge: {})
+                        } label: {
+                            Text("(v.\(version))")
+                                .font(.caption2)
+                                .underline(hoveringVersion)
+                                .foregroundStyle(hoveringVersion ? Color.accentColor : Color.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help(tr("Список изменений"))
+                        .onHover { inside in
+                            hoveringVersion = inside
+                            if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                        }
                     }
                 }
                 Text(tr("Нативное приложение для Mac, которое скачивает видео и аудио с YouTube, VK, Instagram, TikTok, Vimeo и ещё почти 1750 сайтов одной кнопкой.\nПоказ реального размера файла перед скачиванием, поддержка ссылок в любом виде и умная подстановка из буфера обмена."))
@@ -436,18 +476,19 @@ struct ContentView: View {
         VStack(alignment: .trailing, spacing: 3) {
             if updateChecker.updateAvailable {
                 Button {
-                    updateChecker.openDownload()
+                    updateChecker.startUpdate(downloadInProgress: manager.isRunning)
                 } label: {
-                    Text(tr("Доступно обновление")
-                         + (updateChecker.latestVersion.map { " (\($0))" } ?? ""))
+                    Text(tr("Доступно обновление") + (updateChecker.latestVersion.map { " (\($0))" } ?? ""))
                         .font(.caption2.bold())
-                        .foregroundStyle(.red)
-                        .shadow(color: .red.opacity(updateGlow ? 0.85 : 0.25),
-                                radius: updateGlow ? 6 : 2)
+                        .foregroundStyle(updateChecker.installState != .idle || updateGlow
+                                         ? Color.secondary : Color.red)
                 }
                 .buttonStyle(.plain)
+                .disabled(updateChecker.installState != .idle)
                 .onAppear {
-                    withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
+                    // Slow on purpose (about 3 s per red→gray→red cycle): it
+                    // should catch the eye without nagging.
+                    withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
                         updateGlow = true
                     }
                 }
@@ -460,8 +501,18 @@ struct ContentView: View {
 
     private var urlField: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(tr("Ссылка на видео"))
-                .font(.subheadline.weight(.semibold))
+            HStack(spacing: 10) {
+                Text(tr("Ссылка на видео"))
+                    .font(.subheadline.weight(.semibold))
+                Button {
+                    HistoryPanel.shared.show { picked in urlString = picked }
+                } label: {
+                    Label(tr("История скачиваний"), systemImage: "clock.arrow.circlepath")
+                }
+                .buttonStyle(.link)
+                .font(.caption)
+                Spacer(minLength: 0)
+            }
             TextField(tr("https://vk.com/video…  или  https://www.youtube.com/watch?v=…"), text: $urlString)
                 .textFieldStyle(.roundedBorder)
                 .font(.title3)
@@ -626,7 +677,7 @@ struct ContentView: View {
 
             // Compares against the same tr() call DownloadManager used to
             // build statusLine, so the match works regardless of language.
-            if manager.isRunning && manager.statusLine.hasPrefix(tr("Скачивание сейчас начнётся")) {
+            if manager.isRunning && manager.statusLine.hasPrefix(tr("Скачивание сейчас начнётся…")) {
                 Text(tr("Программа запрашивает у сайта данные о видео: адреса потоков и способ обхода защиты. Обычно 2–10 секунд."))
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
@@ -963,6 +1014,7 @@ struct AdvancedSettingsView: View {
     var onClose: () -> Void
 
     @AppStorage("muteChime") private var muteChime = false
+    @AppStorage(DiagnosticReporter.enabledKey) private var sendDiagnostics = true
     @AppStorage("muteLaunchSound") private var muteLaunchSound = false
     @ObservedObject private var languageSettings = LanguageSettings.shared
 
@@ -974,6 +1026,8 @@ struct AdvancedSettingsView: View {
                 toolsBlock
                 Divider()
                 languageBlock
+                Divider()
+                diagnosticsBlock
             }
             .padding(20)
             Divider()
@@ -1001,29 +1055,48 @@ struct AdvancedSettingsView: View {
     private var toolsBlock: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(tr("Обновление встроенных инструментов")).font(.subheadline.weight(.semibold))
-            Text(tr("Программа скачивает видео с помощью внутренних инструментов. Если видео перестало скачиваться — проверьте и установите обновление здесь."))
+            Text(tr("Программа скачивает видео с помощью внутренних инструментов и сама их обновляет. Если видео перестало скачиваться — нажми «Проверить сейчас»."))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            HStack {
+            HStack(spacing: 10) {
                 Button {
-                    manager.checkForToolUpdate()
+                    manager.checkAndUpdateTools()
                 } label: {
-                    if manager.isCheckingToolUpdate { ProgressView().controlSize(.small) }
-                    else { Text(tr("Проверить обновление")) }
+                    if manager.isCheckingToolUpdate {
+                        HStack(spacing: 6) {
+                            ProgressView().controlSize(.small)
+                            Text(tr("Проверяю…"))
+                        }
+                    } else {
+                        Text(tr("Проверить сейчас"))
+                    }
                 }
                 .disabled(manager.isRunning || manager.isCheckingToolUpdate)
 
-                Button(tr("Обновить")) { manager.updateTools() }
-                    .disabled(manager.isRunning
-                              || !manager.toolUpdateAvailable
-                              || (!manager.usingBundledTools && !manager.hasHomebrew))
+                if let version = manager.ytDlpVersion {
+                    Text(trf("yt-dlp %@", version))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
             if let status = manager.toolUpdateCheckStatus {
                 Text(status)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    private var diagnosticsBlock: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(tr("Отчёты о сбоях")).font(.subheadline.weight(.semibold))
+            Toggle(tr("Отправлять разработчику анонимные отчёты о сбоях"), isOn: $sendDiagnostics)
+                .toggleStyle(.checkbox)
+                .font(.caption)
+            Text(tr("Только версии программы и системы и тип ошибки — без ссылок и личных данных."))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -1184,10 +1257,14 @@ final class WhatsNewPanel {
     static let shared = WhatsNewPanel()
     private var window: NSWindow?
 
-    func show(version: String, items: [String], onAcknowledge: @escaping () -> Void) {
+    /// Opens the changelog for `version`. `onAcknowledge` runs only when the
+    /// button under the list is pressed (closing with the window's own ✕
+    /// doesn't count).
+    func show(version: String, closeTitle: String, onAcknowledge: @escaping () -> Void) {
         NSApp.activate(ignoringOtherApps: true)
+        window?.close()
         let hosting = NSHostingController(
-            rootView: WhatsNewView(items: items, onClose: { [weak self] in
+            rootView: WhatsNewView(version: version, closeTitle: closeTitle, onClose: { [weak self] in
                 onAcknowledge()
                 self?.window?.close()
             })
@@ -1205,15 +1282,16 @@ final class WhatsNewPanel {
 }
 
 struct WhatsNewView: View {
-    let items: [String]
+    let version: String
+    let closeTitle: String
     var onClose: () -> Void
 
     @ObservedObject private var languageSettings = LanguageSettings.shared
 
     var body: some View {
-        InfoScaffold(width: 480, height: 520, closeTitle: tr("Круто"), onClose: onClose) {
+        InfoScaffold(width: 480, height: 520, closeTitle: closeTitle, onClose: onClose) {
             VStack(alignment: .leading, spacing: 10) {
-                ForEach(items, id: \.self) { item in
+                ForEach(ContentView.changelog[version] ?? [], id: \.self) { item in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text("•").foregroundStyle(.secondary)
                         Text(tr(item)).fixedSize(horizontal: false, vertical: true)
@@ -1270,7 +1348,7 @@ struct AboutView: View {
     var body: some View {
         InfoScaffold(width: 480, height: 600, closeTitle: tr("Благодарю"), onClose: onClose) {
             VStack(alignment: .leading, spacing: 14) {
-                Text(tr("Если видео перестало скачиваться — нажмите «Обновить» в разделе «Дополнительно». Сайты периодически меняют защиту, обновление её догоняет."))
+                Text(tr("Если видео перестало скачиваться — нажмите «Проверить сейчас» в разделе «Дополнительно». Сайты периодически меняют защиту, обновление её догоняет."))
                     .font(.callout)
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1446,6 +1524,8 @@ struct LegalView: View {
                     "Автор не гарантирует, что программа работает, работает правильно или продолжит работать в будущем.",
                 ].map(tr))
 
+                para("Отчёты о сбоях.", "При серьёзных сбоях программа может отправить разработчику короткий анонимный отчёт: версии программы и macOS и тип ошибки. Ссылки и личные данные не отправляются. Отключить можно в «Дополнительно».")
+
                 Text(tr("Программа распространяется бесплатно, в текущем виде, без каких-либо гарантий. Скачивая что-либо через программу, вы действуете на свой страх и риск и полностью принимаете ответственность на себя."))
                     .foregroundStyle(.secondary)
                     .padding(.top, 2)
@@ -1466,13 +1546,37 @@ struct LegalView: View {
 /// GitHub Release's stable "latest" URL for the user to grab themselves.
 @MainActor
 final class UpdateChecker: ObservableObject {
+    enum InstallState: Equatable { case idle, installing }
+
     @Published private(set) var updateAvailable = false
     @Published private(set) var latestVersion: String?
+    @Published private(set) var installState: InstallState = .idle
+
+    /// Set at launch when this run is the result of an in-app update: shown
+    /// once, in the same window that asked the question.
+    private(set) var launchResult: UpdatePanel.Phase?
+    func takeLaunchResult() -> UpdatePanel.Phase? {
+        defer { launchResult = nil }
+        return launchResult
+    }
+
+    private static let pendingUpdateKey = "pendingAppUpdateVersion"
+
+    init() {
+        let defaults = UserDefaults.standard
+        guard let target = defaults.string(forKey: Self.pendingUpdateKey) else { return }
+        defaults.removeObject(forKey: Self.pendingUpdateKey)
+        let current = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "?"
+        launchResult = current == target ? .finished(current) : .rolledBack
+        if current != target {
+            DiagnosticReporter.report(.appUpdateRolledBack,
+                                      details: "Ставили версию \(target), запущена \(current).")
+        }
+    }
 
     private let versionURL = URL(string:
         "https://raw.githubusercontent.com/erickkey/VideoDownloader/main/version.json")!
-    private let downloadURL = URL(string:
-        "https://github.com/erickkey/VideoDownloader/releases/latest/download/VideoDownloader.dmg")!
+    private let downloadURL = AppInstaller.downloadURL
 
     func check() {
         let currentVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "0"
@@ -1495,14 +1599,76 @@ final class UpdateChecker: ObservableObject {
                 self.updateAvailable = true
             }
         }
+        if installState == .idle, !Self.cleanedUp {
+            Self.cleanedUp = true
+            DispatchQueue.global(qos: .utility).async { AppInstaller.cleanupLeftovers() }
+        }
     }
+
+    private static var cleanedUp = false
 
     func openDownload() {
         NSWorkspace.shared.open(downloadURL)
     }
 
+    /// The red "update available" button: asks first (in the update window),
+    /// then downloads the new version and swaps the app in place — see
+    /// AppInstaller. Falls back to opening the download page whenever the app
+    /// can't replace itself.
+    func startUpdate(downloadInProgress: Bool) {
+        guard installState == .idle, let version = latestVersion else { return }
+        if AppInstaller.cannotReplaceSelfReason() != nil {
+            openDownload()
+            return
+        }
+        let panel = UpdatePanel.shared
+        if downloadInProgress {
+            panel.show(.downloadRunning)
+            return
+        }
+        panel.onConfirm = { [weak self] in self?.beginInstall(version: version) }
+        panel.show(.confirm(version))
+    }
+
+    private func beginInstall(version: String) {
+        guard installState == .idle else { return }
+        let panel = UpdatePanel.shared
+        let currentVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "0"
+
+        installState = .installing
+        panel.show(.downloading(0))
+        Task {
+            do {
+                try AppInstaller.ensureDiskSpace()
+                let dmg = try await AppInstaller.download(from: AppInstaller.downloadURL) { fraction in
+                    Task { @MainActor in
+                        if case .downloading = panel.phase { panel.update(.downloading(fraction)) }
+                    }
+                }
+                panel.update(.verifying)
+                let staged = try await Task.detached(priority: .userInitiated) {
+                    try AppInstaller.prepare(dmg: dmg, currentVersion: currentVersion)
+                }.value
+                panel.update(.installing)
+                let stagedVersion = Bundle(url: staged)?.infoDictionary?["CFBundleShortVersionString"] as? String
+                UserDefaults.standard.set(stagedVersion ?? version, forKey: Self.pendingUpdateKey)
+                UserDefaults.standard.synchronize()
+                try AppInstaller.launchInstaller(staged: staged)
+                try? await Task.sleep(nanoseconds: 600_000_000)   // let the "installing" step be seen
+                NSApp.terminate(nil)
+            } catch {
+                self.installState = .idle
+                UserDefaults.standard.removeObject(forKey: Self.pendingUpdateKey)
+                panel.update(.failed(AppInstaller.friendlyMessage(for: error)))
+                let ns = error as NSError
+                DiagnosticReporter.report(.appUpdateFailed, details:
+                    "Обновление \(currentVersion) → \(version)\n\(AppInstaller.friendlyMessage(for: error))\n(\(ns.domain) \(ns.code))")
+            }
+        }
+    }
+
     /// Simple dotted-version compare ("1.10" > "1.9").
-    private static func isNewer(_ a: String, than b: String) -> Bool {
+    nonisolated static func isNewer(_ a: String, than b: String) -> Bool {
         let pa = a.split(separator: ".").compactMap { Int($0) }
         let pb = b.split(separator: ".").compactMap { Int($0) }
         for i in 0..<max(pa.count, pb.count) {

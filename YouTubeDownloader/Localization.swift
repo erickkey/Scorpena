@@ -81,6 +81,15 @@ enum Translations {
             "https://vk.com/video…  or  https://www.youtube.com/watch?v=…",
         "Кажется, это не ссылка — проверь, что скопировалось": "Doesn't look like a link — check what you copied",
         "Это главная страница сайта, а не ссылка на видео": "That's the site's homepage, not a link to a video",
+        "История скачиваний": "Download history",
+        "Пока нет скачиваний": "No downloads yet",
+        "Очистить историю": "Clear history",
+        "Очистить историю?": "Clear history?",
+        "Очистить": "Clear",
+        "Отмена": "Cancel",
+        "Список будет удалён. Скачанные файлы не затрагиваются.": "The list will be deleted. Downloaded files are not affected.",
+        "Видео": "Video",
+        "Звук": "Audio",
         "Необычный сайт — программа попробует, но результат не гарантирован": "Unusual site — the app will try, but success isn't guaranteed",
         "Сайт есть в списке поддерживаемых ✅": "Site is in the supported list ✅",
         "видео": "video",
@@ -141,14 +150,51 @@ enum Translations {
         "Отключить звук уведомления о скачивании": "Mute the download-complete sound",
         "Отключить звук запуска приложения": "Mute the app launch sound",
         "Обновление встроенных инструментов": "Built-in tools update",
-        "Программа скачивает видео с помощью внутренних инструментов. Если видео перестало скачиваться — проверьте и установите обновление здесь.":
-            "The app downloads videos using internal tools. If videos stop downloading, check for and install an update here.",
-        "Проверить обновление": "Check for update",
         "Обновить": "Update",
         "Язык": "Language",
 
         // MARK: What's New
         "Круто": "Cool!",
+        "Список изменений": "What's New",
+        "Сейчас идёт скачивание": "A download is in progress",
+        "Отчёты о сбоях": "Crash reports",
+        "Программа скачивает видео с помощью внутренних инструментов и сама их обновляет. Если видео перестало скачиваться — нажми «Проверить сейчас».": "The app downloads videos using internal tools and updates them by itself. If videos stop downloading, press “Check now”.",
+        "Проверить сейчас": "Check now",
+        "Проверяю…": "Checking…",
+        "У тебя последняя версия (%@). Проверка заняла %d с.": "You have the latest version (%@). The check took %d s.",
+        "Обновлено: %@ → %@ ✅ (за %d с)": "Updated: %@ → %@ ✅ (in %d s)",
+        "Шаг %d из 4 · %@": "Step %d of 4 · %@",
+        "Проверяю на GitHub, вышла ли новая версия…": "Checking GitHub for a new version…",
+        "Сохраняю копию текущей версии — на случай отката…": "Saving a copy of the current version — in case of a rollback…",
+        "Скачиваю и ставлю новую версию (около 36 МБ)…": "Downloading and installing the new version (about 36 MB)…",
+        "Проверяю, что новая версия работает с YouTube…": "Checking that the new version works with YouTube…",
+        "Обычно занимает до минуты.": "Usually takes up to a minute.",
+        "yt-dlp %@": "yt-dlp %@",
+        "Новая версия %@ не прошла проверку — оставил %@.": "The new version %@ didn't pass the check — kept %@.",
+        "Не удалось проверить обновления — нет связи с интернетом.": "Couldn't check for updates — no internet connection.",
+        "Отправлять разработчику анонимные отчёты о сбоях": "Send anonymous crash reports to the developer",
+        "Только версии программы и системы и тип ошибки — без ссылок и личных данных.": "Only app and system versions and the type of error — no links or personal data.",
+        "Дождись окончания скачивания и нажми кнопку обновления ещё раз.": "Wait for the download to finish, then press the update button again.",
+        "Вышла новая версия %@": "Version %@ is out",
+        "Обновимся прямо сейчас? Займёт около минуты, программа сама перезапустится. Настройки и история сохранятся.": "Update right now? It takes about a minute and the app restarts by itself. Your settings and history are kept.",
+        "Позже": "Later",
+        "Загружаю новую версию…": "Downloading the new version…",
+        "Проверяю загрузку…": "Checking the download…",
+        "Убеждаюсь, что всё скачалось без повреждений.": "Making sure everything downloaded intact.",
+        "Ставлю обновление…": "Installing the update…",
+        "Сейчас программа перезапустится.": "The app is about to restart.",
+        "Готово! Теперь у тебя версия %@ ✅": "Done! You now have version %@ ✅",
+        "Отлично": "Great",
+        "Обновиться не получилось": "The update didn't work out",
+        "Ничего не сломалось: осталась прежняя версия.": "Nothing broke: the previous version is still in place.",
+        "Новая версия не запустилась, поэтому вернули прежнюю. Ничего не сломалось — можно скачать новую вручную.": "The new version wouldn't start, so the previous one was put back. Nothing broke — you can download the new one manually.",
+        "Скачать вручную": "Download manually",
+        "Нет связи с интернетом или GitHub недоступен. Проверь подключение и попробуй ещё раз.": "No internet connection, or GitHub is unreachable. Check your connection and try again.",
+        "GitHub не отдал файл обновления (код %d). Попробуй позже или скачай вручную.": "GitHub didn't serve the update file (code %d). Try later or download it manually.",
+        "Не хватает места на диске. Освободи около 1 ГБ и попробуй снова.": "Not enough disk space. Free up about 1 GB and try again.",
+        "Скачанный файл не открылся — возможно, загрузка прервалась. Попробуй ещё раз.": "The downloaded file wouldn't open — the download may have been interrupted. Try again.",
+        "Скачанный файл повреждён или не подходит к этому приложению.": "The downloaded file is damaged or doesn't match this app.",
+        "Что-то пошло не так: %@": "Something went wrong: %@",
         "Список изменений (v.%@)": "What's New (v.%@)",
         "Отдельные кнопки «Скачать видео» и «Скачать звук» вместо одной галочки.":
             "Separate “Download video” and “Download audio” buttons instead of one checkbox.",
@@ -174,13 +220,18 @@ enum Translations {
             "“Feedback” — a dedicated section: write a question, a suggestion, or anything else, optionally leaving your name and contact.",
         "Можно запомнить нужный размер окна — при выходе программа спросит, сохранить ли его.":
             "You can save your preferred window size — the app asks whether to remember it when you quit.",
+        "Обновление программы теперь одной кнопкой (наконец-то).": "Updating the app is now one button (finally).",
+        "Встроенный загрузчик обновляется сам.": "The built-in downloader updates itself.",
+        "История скачиваний.": "Download history.",
+        "Поправлен баг – новая скопированная ссылка теперь сама заменяет старую.": "Fixed a bug — a newly copied link now replaces the old one by itself.",
+        "Анонимные отчёты о сбоях теперь автоматические (отключаются в «Дополнительно»).": "Anonymous crash reports are now automatic (you can turn them off in “Advanced”).",
         "Версия программы видна в шапке окна.": "The app version is shown in the header.",
         "Технический журнал скрыт от пользователя.": "The technical log is now hidden from the user.",
         "Мелкие внутренние улучшения и исправления.": "Minor internal improvements and fixes.",
 
         // MARK: About window
-        "Если видео перестало скачиваться — нажмите «Обновить» в разделе «Дополнительно». Сайты периодически меняют защиту, обновление её догоняет.":
-            "If videos stop downloading, click “Update” in the “Advanced” section. Sites periodically change their protection, and an update catches up with it.",
+        "Если видео перестало скачиваться — нажмите «Проверить сейчас» в разделе «Дополнительно». Сайты периодически меняют защиту, обновление её догоняет.":
+            "If videos stop downloading, click “Check now” in the “Advanced” section. Sites periodically change their protection, and an update catches up with it.",
         "Скопируй ссылку и нажми «Скачать»": "Copy the link and hit “Download”",
         "Нативное приложение для Mac — скачивает видео и аудио с YouTube, VK, Instagram, TikTok, Vimeo и ещё ~1750 сайтов одним кликом. Сохраняет видео в .mp4 (H.264) — открывается на любом устройстве. Звук можно скачать отдельно.":
             "A native Mac app — downloads video and audio from YouTube, VK, Instagram, TikTok, Vimeo, and ~1750 other sites in one click. Saves video as .mp4 (H.264) — opens on any device. Audio can be downloaded separately.",
@@ -238,6 +289,8 @@ enum Translations {
         "Программа распространяется бесплатно, в текущем виде, без каких-либо гарантий. Скачивая что-либо через программу, вы действуете на свой страх и риск и полностью принимаете ответственность на себя.":
             "The app is distributed free of charge, as-is, without any warranty. By downloading anything through it, you act at your own risk and take full responsibility.",
         "Понятно": "Got it",
+        "Отчёты о сбоях.": "Crash reports.",
+        "При серьёзных сбоях программа может отправить разработчику короткий анонимный отчёт: версии программы и macOS и тип ошибки. Ссылки и личные данные не отправляются. Отключить можно в «Дополнительно».": "After a serious failure the app may send the developer a short anonymous report: the app and macOS versions and the type of error. Links and personal data are not sent. You can turn this off in “Advanced”.",
 
         // MARK: DownloadManager — probe status
         "Проверяю доступные качества… %d с": "Checking available qualities… %d s",
@@ -248,9 +301,6 @@ enum Translations {
         // MARK: DownloadManager — tooling
         "yt-dlp и ffmpeg установлены ✅": "yt-dlp and ffmpeg installed ✅",
         "Установка yt-dlp и ffmpeg через Homebrew…": "Installing yt-dlp and ffmpeg via Homebrew…",
-        "У вас последняя версия yt-dlp (%@).": "You have the latest version of yt-dlp (%@).",
-        "Доступно обновление: %@ → %@. Нажмите «Обновить».": "Update available: %@ → %@. Click “Update”.",
-        "Не удалось проверить обновления — нет сети (у вас %@).": "Couldn't check for updates — no network (you have %@).",
         "Не удалось проверить обновления.": "Couldn't check for updates.",
         "yt-dlp обновлён ✅": "yt-dlp updated ✅",
         "Обновление встроенного yt-dlp…": "Updating the built-in yt-dlp…",
@@ -307,8 +357,8 @@ enum Translations {
             "Link not recognized or the site isn't supported. A direct video page URL is needed (YouTube, VK, etc.).",
         "Не нашёлся формат под выбранное качество — попробуйте «Максимальное».":
             "No format found for the selected quality — try “Best”.",
-        "YouTube отклонил загрузку (403). Откройте «Дополнительно» → «Обновить», затем повторите. Или попробуйте другую ссылку.":
-            "YouTube rejected the download (403). Open “Advanced” → “Update”, then try again. Or try a different link.",
+        "YouTube отклонил загрузку (403). Откройте «Дополнительно» → «Проверить сейчас», затем повторите. Или попробуйте другую ссылку.":
+            "YouTube rejected the download (403). Open “Advanced” → “Check now”, then try again. Or try a different link.",
         "Нет соединения с интернетом.": "No internet connection.",
 
         // MARK: formatBytes

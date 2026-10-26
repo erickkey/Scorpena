@@ -21,6 +21,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         true
     }
 
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        DiagnosticReporter.reportPreviousCrashIfAny()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 25) { DiagnosticReporter.checkBundledTools() }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        DownloadHistory.shared.prune()
+    }
+
     /// Refuses macOS's own window-state restoration outright, at the
     /// earliest possible point (before any window — including the main
     /// one — is even created). Without this, a previous run's saved state

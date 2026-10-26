@@ -16,10 +16,11 @@ SDK="$(xcrun --show-sdk-path)"
 DT="13.0"
 BUNDLE_ID="com.yaroslavlukyanov.VideoDownloader"
 FFMPEG_TAG="b6.0"
+DENO_TAG="v2.9.8"   # JS engine yt-dlp needs to solve YouTube challenges
 
 # Bump this for every release that should trigger the in-app "update available"
 # notice (must match the "version" in version.json on GitHub).
-APP_VERSION="2.0"
+APP_VERSION="2.1"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/bin"
@@ -93,7 +94,18 @@ lipo -create "$BIN/.ff-arm64" "$BIN/.ff-x86_64" -o "$BIN/ffmpeg"
 chmod +x "$BIN/ffmpeg"
 rm -f "$BIN/.ff-arm64" "$BIN/.ff-x86_64"
 
-for t in yt-dlp ffmpeg; do
+echo "==> bundling universal deno (~75 MB download)"
+dbase="https://github.com/denoland/deno/releases/download/${DENO_TAG}"
+DTMP="$(mktemp -d)"
+curl -fL --retry 3 --retry-delay 2 -o "$DTMP/arm64.zip"  "$dbase/deno-aarch64-apple-darwin.zip"
+curl -fL --retry 3 --retry-delay 2 -o "$DTMP/x86_64.zip" "$dbase/deno-x86_64-apple-darwin.zip"
+unzip -q -o "$DTMP/arm64.zip"  -d "$DTMP/arm64"
+unzip -q -o "$DTMP/x86_64.zip" -d "$DTMP/x86_64"
+lipo -create "$DTMP/arm64/deno" "$DTMP/x86_64/deno" -o "$BIN/deno"
+chmod +x "$BIN/deno"
+rm -rf "$DTMP"
+
+for t in yt-dlp ffmpeg deno; do
     codesign --verify --quiet "$BIN/$t" 2>/dev/null \
         || codesign --force --sign - --timestamp=none "$BIN/$t"
 done
@@ -110,3 +122,4 @@ echo "built: $APP"
 echo "arch:  $(lipo -archs "$APP/Contents/MacOS/VideoDownloader")"
 echo "  yt-dlp: $(lipo -archs "$BIN/yt-dlp")"
 echo "  ffmpeg: $(lipo -archs "$BIN/ffmpeg")"
+echo "  deno:   $(lipo -archs "$BIN/deno")"

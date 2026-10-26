@@ -42,7 +42,7 @@ codesign --verify --deep --strict "$APP" \
     || echo "signature: verify warned (fine for sharing without notarization)"
 
 BIN="$APP/Contents/Resources/bin"
-for t in yt-dlp ffmpeg; do
+for t in yt-dlp ffmpeg deno; do
     if [ -x "$BIN/$t" ]; then
         echo "  $t: $(lipo -archs "$BIN/$t" 2>/dev/null || echo '?')"
     else

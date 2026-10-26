@@ -47,7 +47,8 @@ final class DownloadManager: ObservableObject {
 
     @Published private(set) var isCheckingToolUpdate = false
     @Published private(set) var toolUpdateCheckStatus: String?
-    @Published private(set) var toolUpdateAvailable = false
+    @Published private(set) var ytDlpVersion: String?
+    private var toolProgressTimer: Timer?
 
     /// Set when a download needs Safari cookies but the app lacks Full Disk Access.
     @Published private(set) var needsFullDiskAccess = false
@@ -145,6 +146,29 @@ final class DownloadManager: ObservableObject {
         ytDlpPath = ToolLocator.find("yt-dlp", userOverride: defaults.string(forKey: ytDlpKey))
         ffmpegPath = ToolLocator.find("ffmpeg", userOverride: defaults.string(forKey: ffmpegKey))
         brewPath = ToolLocator.find("brew", userOverride: nil)
+        refreshYtDlpVersion()
+    }
+
+    func refreshYtDlpVersion() {
+        guard let ytDlp = ytDlpPath else { ytDlpVersion = nil; return }
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let version = Self.captureOutput(ytDlp, ["--version"])?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            DispatchQueue.main.async { self?.ytDlpVersion = (version?.isEmpty == false) ? version : nil }
+        }
+    }
+
+    /// Quietly brings the bundled yt-dlp up to the latest stable release (at
+    /// most once a day, with a backup and rollback — see ToolAutoUpdater).
+    /// Waits a few seconds so it never competes with the launch sequence.
+    func autoUpdateToolsIfDue() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in
+            guard let self, !self.isRunning, !self.isProbing else { return }
+            ToolAutoUpdater.shared.runIfDue(ytDlp: self.ytDlpPath, knownVersion: self.ytDlpVersion) { [weak self] in
+                self?.toolUpdateCheckStatus = nil
+                self?.refreshYtDlpVersion()
+            }
+        }
     }
 
     func setYtDlpPath(_ path: String) {
@@ -236,13 +260,37 @@ final class DownloadManager: ObservableObject {
         }
     }
 
+    /// PATH for yt-dlp's child processes. With the bundled tools, Homebrew's
+    /// directories are deliberately left out: the app must work on a Mac
+    /// that has nothing installed, and a stray Homebrew deno/node on the
+    /// developer's machine would otherwise hide a missing bundled one.
+    static func toolSearchPath(ytDlp: String, extraFirst: [String] = []) -> String {
+        var dirs = extraFirst
+        if ToolLocator.isBundled(ytDlp), let bin = ToolLocator.bundledBinDirectory {
+            dirs.append(bin)
+        } else {
+            dirs += ["/opt/homebrew/bin", "/usr/local/bin"]
+        }
+        dirs += ["/usr/bin", "/bin"]
+        return dirs.joined(separator: ":")
+    }
+
+    /// YouTube needs a JavaScript engine to solve its signature/"n"
+    /// challenges (yt-dlp ships the solver scripts but not an engine), so
+    /// point yt-dlp at the deno bundled next to it.
+    static func jsRuntimeArgs() -> [String] {
+        guard let bin = ToolLocator.bundledBinDirectory else { return [] }
+        let deno = bin + "/deno"
+        return FileManager.default.isExecutableFile(atPath: deno) ? ["--js-runtimes", "deno:\(deno)"] : []
+    }
+
     private static func runProbe(ytDlp: String, url: String, cookieArgs: [String])
         -> (title: String, heights: [Int], sizeByHeight: [Int: Int64], duration: Double?)? {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: ytDlp)
-        p.arguments = ["-J", "--no-warnings", "--no-playlist", "--no-progress"] + cookieArgs + [url]
+        p.arguments = ["-J", "--no-warnings", "--no-playlist", "--no-progress"] + jsRuntimeArgs() + cookieArgs + [url]
         var env = ProcessInfo.processInfo.environment
-        env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+        env["PATH"] = toolSearchPath(ytDlp: ytDlp)
         p.environment = env
         let out = Pipe()
         p.standardOutput = out
@@ -303,39 +351,87 @@ final class DownloadManager: ObservableObject {
                 startStatus: tr("Установка yt-dlp и ffmpeg через Homebrew…"))
     }
 
-    /// Compares the installed yt-dlp version against the latest GitHub release,
-    /// without downloading or changing anything. Works the same whether yt-dlp
-    /// is the bundled self-updating binary or a Homebrew install.
-    func checkForToolUpdate() {
-        guard !isRunning, !isCheckingToolUpdate, let ytDlp = ytDlpPath else { return }
+    /// "Проверить сейчас": checks for a newer stable yt-dlp and installs it
+    /// right away (with the same backup + self-check + rollback as the daily
+    /// automatic update). With a Homebrew yt-dlp, runs `brew upgrade` instead.
+    func checkAndUpdateTools() {
+        guard !isRunning, !isCheckingToolUpdate else { return }
+        guard let ytDlp = ytDlpPath else { return }
+        guard ToolLocator.isBundled(ytDlp) else {
+            updateTools()
+            return
+        }
         isCheckingToolUpdate = true
-        toolUpdateCheckStatus = nil
-        toolUpdateAvailable = false
+        let start = Date()
+        var shownStage = ToolAutoUpdater.Stage.checking
+        toolUpdateCheckStatus = Self.toolProgressText(shownStage, since: start)
 
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let current = Self.captureOutput(ytDlp, ["--version"])?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let latest = Self.fetchLatestYtDlpVersion()
+        // Every step stays on screen long enough to be read: a step that
+        // finishes instantly still keeps its line for `minStageDisplay`
+        // before the next one (or the result) replaces it. The real work
+        // carries on in the background meanwhile.
+        var freeAt = Date().addingTimeInterval(Self.minStageDisplay)
+        func present(holdFor hold: TimeInterval, _ apply: @escaping () -> Void) {
+            let delay = max(0, freeAt.timeIntervalSinceNow)
+            freeAt = Date().addingTimeInterval(delay + hold)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: apply)
+        }
 
-            DispatchQueue.main.async {
+        toolProgressTimer?.invalidate()
+        toolProgressTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            self?.toolUpdateCheckStatus = Self.toolProgressText(shownStage, since: start)
+        }
+
+        ToolAutoUpdater.shared.updateNow(ytDlp: ytDlp, knownVersion: ytDlpVersion, onStage: { [weak self] newStage in
+            present(holdFor: Self.minStageDisplay) {
+                shownStage = newStage
+                self?.toolUpdateCheckStatus = Self.toolProgressText(newStage, since: start)
+            }
+        }, completion: { [weak self] outcome in
+            present(holdFor: 0) {
                 guard let self else { return }
+                self.toolProgressTimer?.invalidate()
+                self.toolProgressTimer = nil
                 self.isCheckingToolUpdate = false
-                switch (current, latest) {
-                case let (.some(c), .some(l)) where c == l:
-                    self.toolUpdateCheckStatus = trf("У вас последняя версия yt-dlp (%@).", c)
-                case let (.some(c), .some(l)):
-                    self.toolUpdateAvailable = true
-                    self.toolUpdateCheckStatus = trf("Доступно обновление: %@ → %@. Нажмите «Обновить».", c, l)
-                case let (.some(c), nil):
-                    self.toolUpdateCheckStatus = trf("Не удалось проверить обновления — нет сети (у вас %@).", c)
-                default:
+                let seconds = Int(Date().timeIntervalSince(start).rounded())
+                switch outcome {
+                case .upToDate(let v):
+                    self.ytDlpVersion = v
+                    self.toolUpdateCheckStatus = trf("У тебя последняя версия (%@). Проверка заняла %d с.", v, seconds)
+                case .updated(let from, let to):
+                    self.ytDlpVersion = to
+                    self.toolUpdateCheckStatus = trf("Обновлено: %@ → %@ ✅ (за %d с)", from, to, seconds)
+                case .keptOld(let current, let rejected):
+                    self.toolUpdateCheckStatus = trf("Новая версия %@ не прошла проверку — оставил %@.", rejected, current)
+                case .offline:
+                    self.toolUpdateCheckStatus = tr("Не удалось проверить обновления — нет связи с интернетом.")
+                case .failed:
                     self.toolUpdateCheckStatus = tr("Не удалось проверить обновления.")
                 }
             }
-        }
+        })
     }
 
-    private static func captureOutput(_ executablePath: String, _ args: [String]) -> String? {
+    private static let minStageDisplay: TimeInterval = 3
+
+    /// "Шаг 3 из 4 · Скачиваю и ставлю новую версию… · 12 с" (+ how long it usually takes).
+    private static func toolProgressText(_ stage: ToolAutoUpdater.Stage, since start: Date) -> String {
+        let what: String
+        switch stage {
+        case .checking:    what = tr("Проверяю на GitHub, вышла ли новая версия…")
+        case .backingUp:   what = tr("Сохраняю копию текущей версии — на случай отката…")
+        case .downloading: what = tr("Скачиваю и ставлю новую версию (около 36 МБ)…")
+        case .verifying:   what = tr("Проверяю, что новая версия работает с YouTube…")
+        }
+        let elapsed = Int(Date().timeIntervalSince(start))
+        var text = trf("Шаг %d из 4 · %@", stage.rawValue, what) + " · " + trf("%d с", elapsed)
+        if stage.rawValue >= ToolAutoUpdater.Stage.downloading.rawValue {
+            text += "\n" + tr("Обычно занимает до минуты.")
+        }
+        return text
+    }
+
+    static func captureOutput(_ executablePath: String, _ args: [String]) -> String? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executablePath)
         process.arguments = args
@@ -352,7 +448,7 @@ final class DownloadManager: ObservableObject {
         return String(data: data, encoding: .utf8)
     }
 
-    private static func fetchLatestYtDlpVersion() -> String? {
+    static func fetchLatestYtDlpVersion() -> String? {
         guard let url = URL(string: "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest") else { return nil }
         var request = URLRequest(url: url)
         request.setValue("VideoDownloader-app", forHTTPHeaderField: "User-Agent")
@@ -503,7 +599,7 @@ final class DownloadManager: ObservableObject {
             "--ffmpeg-location", ffmpegDir,
             // Pull DASH/HLS fragments in parallel — big speed-up for Vimeo etc.
             "--concurrent-fragments", "5",
-        ]
+        ] + Self.jsRuntimeArgs()
         if pendingAudioOnly {
             arguments += [
                 "-f", "ba/b",
@@ -544,7 +640,7 @@ final class DownloadManager: ObservableObject {
         arguments.append(pendingURL)
 
         var env = ProcessInfo.processInfo.environment
-        env["PATH"] = "\(ffmpegDir):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+        env["PATH"] = Self.toolSearchPath(ytDlp: ytDlp, extraFirst: [ffmpegDir])
 
         // Only call it "нужен вход" on an actual retry (attempt > 0) — the very
         // first attempt is never announced as a login requirement, even if it
@@ -786,7 +882,6 @@ final class DownloadManager: ObservableObject {
                 phase = .finished
                 statusLine = successStatus
                 refreshTools()
-                toolUpdateAvailable = false
                 toolUpdateCheckStatus = nil
             }
             return
@@ -823,6 +918,11 @@ final class DownloadManager: ObservableObject {
             }
 
             if authWall {
+                if !sawSafariPermissionBlock {
+                    DiagnosticReporter.noteDownloadFailure(
+                        category: "требуется вход / проверка на бота",
+                        host: URL(string: pendingURL)?.host, log: log)
+                }
                 needsFullDiskAccess = sawSafariPermissionBlock
                 phase = .failed(Self.authWallMessage(fdaBlocked: sawSafariPermissionBlock))
                 statusLine = tr("Нужен вход в аккаунт")
@@ -830,14 +930,33 @@ final class DownloadManager: ObservableObject {
             }
 
             if let hint = Self.friendlyDownloadError(in: log) {
+                if let category = Self.breakageCategory(in: log) {
+                    DiagnosticReporter.noteDownloadFailure(
+                        category: category, host: URL(string: pendingURL)?.host, log: log)
+                }
                 phase = .failed(hint)
                 statusLine = tr("Ошибка")
                 return
             }
         }
 
+        if case .download = job {
+            DiagnosticReporter.noteDownloadFailure(
+                category: "неизвестная ошибка", host: URL(string: pendingURL)?.host, log: log)
+        }
         phase = .failed(tr("Что-то пошло не так. Попробуйте ещё раз или сообщите об ошибке. А пока попробуйте другую ссылку."))
         statusLine = tr("Ошибка")
+    }
+
+    /// Failures worth counting as "something broke" (vs. a bad link, a
+    /// private video or no internet, which are the user's to fix).
+    private static func breakageCategory(in log: String) -> String? {
+        let l = log.lowercased()
+        if l.contains("unable to download") && (l.contains("http error 403") || l.contains("403 forbidden")) {
+            return "403 от сайта"
+        }
+        if l.contains("requested format is not available") { return "не нашёлся формат" }
+        return nil
     }
 
     private static func isAuthWall(_ l: String) -> Bool {
@@ -891,6 +1010,9 @@ final class DownloadManager: ObservableObject {
         }
         downloadStartTime = nil
         lastDownloadedFile = file
+        DiagnosticReporter.noteDownloadSuccess()
+        DownloadHistory.shared.record(url: pendingURL, audioOnly: pendingAudioOnly,
+                                      ytDlp: ytDlpPath, cookieArgs: currentCookieSource.ytDlpArgs)
         playChime()
     }
 
@@ -1100,7 +1222,7 @@ final class DownloadManager: ObservableObject {
             return tr("Не нашёлся формат под выбранное качество — попробуйте «Максимальное».")
         }
         if l.contains("unable to download") && (l.contains("http error 403") || l.contains("403 forbidden")) {
-            return tr("YouTube отклонил загрузку (403). Откройте «Дополнительно» → «Обновить», затем повторите. Или попробуйте другую ссылку.")
+            return tr("YouTube отклонил загрузку (403). Откройте «Дополнительно» → «Проверить сейчас», затем повторите. Или попробуйте другую ссылку.")
         }
         if l.contains("unable to resolve host") || l.contains("network is unreachable") || l.contains("connection refused") {
             return tr("Нет соединения с интернетом.")
