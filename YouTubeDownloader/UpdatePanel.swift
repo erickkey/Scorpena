@@ -17,6 +17,8 @@ final class UpdatePanel: ObservableObject {
         case finished(String)           // version now installed
         case rolledBack
         case failed(String)
+        case renamed(canRename: Bool)   // 3.0: the app has a new name
+        case renaming
     }
 
     @Published private(set) var phase: Phase = .confirm("")
@@ -37,7 +39,7 @@ final class UpdatePanel: ObservableObject {
         let hosting = NSHostingController(rootView: UpdatePanelView(panel: self))
         let win = NSWindow(contentViewController: hosting)
         win.styleMask = [.titled]          // no ✕: buttons decide, and it can't be closed mid-update
-        win.title = "VideoDownloader"
+        win.title = "Scorpena – video downloader"
         win.isReleasedWhenClosed = false
         win.isRestorable = false
         win.setContentSize(NSSize(width: 470, height: 180))
@@ -47,6 +49,32 @@ final class UpdatePanel: ObservableObject {
     }
 
     func update(_ phase: Phase) { self.phase = phase }
+
+    /// One-time notice that the app is now called Scorpena. When the file on
+    /// disk can be renamed, the button does that too (and restarts once).
+    func showRenameNotice(canRename: Bool, onClosed: @escaping () -> Void) {
+        onConfirm = { [weak self] in self?.acknowledgeRename(canRename: canRename) }
+        show(.renamed(canRename: canRename), onClosed: onClosed)
+    }
+
+    private func acknowledgeRename(canRename: Bool) {
+        let defaults = UserDefaults.standard
+        guard canRename else {
+            defaults.set(true, forKey: AppRenamer.noticeKey)
+            close()
+            return
+        }
+        update(.renaming)
+        Task {
+            if await AppRenamer.startRename() {
+                defaults.set(true, forKey: AppRenamer.noticeKey)
+                defaults.synchronize()
+                NSApp.terminate(nil)
+            } else {
+                close()   // not now — the notice comes back next launch
+            }
+        }
+    }
 
     func close() {
         window?.close()
@@ -100,7 +128,7 @@ private struct UpdatePanelView: View {
         switch panel.phase {
         case .downloading(let fraction):
             ProgressView(value: fraction).progressViewStyle(.linear)
-        case .verifying, .installing:
+        case .verifying, .installing, .renaming:
             ProgressView().progressViewStyle(.linear)
         default:
             EmptyView()
@@ -123,7 +151,10 @@ private struct UpdatePanelView: View {
             Button(tr("Закрыть")) { panel.close() }
             Button(tr("Скачать вручную")) { panel.openDownloadPage() }
                 .keyboardShortcut(.defaultAction)
-        case .downloading, .verifying, .installing:
+        case .renamed:
+            Button(tr("Ладно")) { panel.confirm() }
+                .keyboardShortcut(.defaultAction)
+        case .downloading, .verifying, .installing, .renaming:
             EmptyView()
         }
     }
@@ -137,6 +168,8 @@ private struct UpdatePanelView: View {
         case .installing:            return tr("Ставлю обновление…")
         case .finished(let version): return trf("Готово! Теперь у тебя версия %@ ✅", version)
         case .rolledBack, .failed:   return tr("Обновиться не получилось")
+        case .renamed:               return tr("Программа переименована")
+        case .renaming:              return tr("Переименовываю…")
         }
     }
 
@@ -158,6 +191,12 @@ private struct UpdatePanelView: View {
             return tr("Новая версия не запустилась, поэтому вернули прежнюю. Ничего не сломалось — можно скачать новую вручную.")
         case .failed(let reason):
             return reason + "\n" + tr("Ничего не сломалось: осталась прежняя версия.")
+        case .renamed(let canRename):
+            return canRename
+                ? tr("Теперь она называется Scorpena – video downloader. Настройки и история на месте. Программа один раз перезапустится, а значок в Dock нужно будет закрепить заново. Если рядом осталась старая копия, её можно удалить.")
+                : tr("Теперь она называется Scorpena – video downloader. Настройки и история на месте. Если рядом осталась старая копия, её можно удалить.")
+        case .renaming:
+            return tr("Секунду, сейчас программа перезапустится.")
         }
     }
 }

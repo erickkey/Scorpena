@@ -17,7 +17,7 @@ enum AppInstaller {
     }
 
     static let downloadURL = URL(string:
-        "https://github.com/erickkey/VideoDownloader/releases/latest/download/VideoDownloader.dmg")!
+        "https://github.com/erickkey/Scorpena/releases/latest/download/Scorpena.dmg")!
 
     static var currentAppURL: URL { Bundle.main.bundleURL }
 
@@ -27,7 +27,7 @@ enum AppInstaller {
     }()
     private static var updateDir: URL { supportDir.appendingPathComponent("Update", isDirectory: true) }
     private static var stagingURL: URL {
-        currentAppURL.deletingLastPathComponent().appendingPathComponent(".VideoDownloader-update.app")
+        currentAppURL.deletingLastPathComponent().appendingPathComponent(".Scorpena-update.app")
     }
 
     /// nil when the app can replace itself; otherwise why it can't (the caller
@@ -48,6 +48,8 @@ enum AppInstaller {
         let fm = FileManager.default
         try? fm.removeItem(at: updateDir)
         try? fm.removeItem(at: stagingURL)
+        // left by 2.x updates
+        try? fm.removeItem(at: currentAppURL.deletingLastPathComponent().appendingPathComponent(".VideoDownloader-update.app"))
     }
 
     private static var unpackMessage: String {
@@ -88,7 +90,7 @@ enum AppInstaller {
     static func download(from url: URL, progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
         let fm = FileManager.default
         try fm.createDirectory(at: updateDir, withIntermediateDirectories: true)
-        let destination = updateDir.appendingPathComponent("VideoDownloader.dmg")
+        let destination = updateDir.appendingPathComponent("Scorpena.dmg")
         try? fm.removeItem(at: destination)
 
         let delegate = DownloadDelegate(destination: destination, progress: progress)
@@ -116,7 +118,7 @@ enum AppInstaller {
             try? fm.removeItem(at: mount)
         }
 
-        let source = mount.appendingPathComponent("VideoDownloader.app")
+        let source = mount.appendingPathComponent("Scorpena.app")
         guard fm.fileExists(atPath: source.path) else {
             throw Failure(message: unpackMessage)
         }
@@ -162,10 +164,15 @@ enum AppInstaller {
         try installScript.write(to: script, atomically: true, encoding: .utf8)
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
 
+        // 3.0 renamed the app: swap it in under the new name when that's free.
+        let renamed = currentAppURL.deletingLastPathComponent().appendingPathComponent("Scorpena.app")
+        let final = (currentAppURL.lastPathComponent != "Scorpena.app" && !fm.fileExists(atPath: renamed.path))
+            ? renamed : currentAppURL
+
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
         process.arguments = [script.path, currentAppURL.path, staged.path, String(getpid()),
-                             supportDir.appendingPathComponent("app-update.log").path]
+                             supportDir.appendingPathComponent("app-update.log").path, final.path]
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
@@ -174,7 +181,7 @@ enum AppInstaller {
 
     private static let installScript = """
     #!/bin/sh
-    APP="$1"; NEW="$2"; PID="$3"; LOG="$4"
+    APP="$1"; NEW="$2"; PID="$3"; LOG="$4"; FINAL="${5:-$1}"
     log() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $*" >> "$LOG"; }
 
     i=0
@@ -189,22 +196,76 @@ enum AppInstaller {
     if ! mv "$APP" "$OLD"; then
         log "could not move the old app aside"; rm -rf "$NEW"; open "$APP"; exit 1
     fi
-    if ! mv "$NEW" "$APP"; then
+    if ! mv "$NEW" "$FINAL"; then
         log "could not move the new app into place, restoring"; mv "$OLD" "$APP"; open "$APP"; exit 1
     fi
-    xattr -cr "$APP" 2>/dev/null
-    log "installed, launching"
-    open "$APP"
+    xattr -cr "$FINAL" 2>/dev/null
+    log "installed as $FINAL, launching"
+    open "$FINAL"
 
     sleep 10
-    if pgrep -f "$APP/Contents/MacOS/" >/dev/null; then
+    if pgrep -f "$FINAL/Contents/MacOS/" >/dev/null; then
         rm -rf "$OLD"
         log "new version is running, old copy removed"
     else
         log "new version did not stay running, restoring the previous one"
-        rm -rf "$APP"
+        rm -rf "$FINAL"
         mv "$OLD" "$APP"
         open "$APP"
+    fi
+    """
+
+    /// Renames the installed `VideoDownloader.app` to its new name: a helper
+    /// waits for this process to exit, renames the folder, relaunches, and
+    /// puts the old name back if the renamed app doesn't stay running.
+    static func launchRenamer(to newURL: URL) throws {
+        let fm = FileManager.default
+        try fm.createDirectory(at: updateDir, withIntermediateDirectories: true)
+        let script = updateDir.appendingPathComponent("rename.sh")
+        try renameScript.write(to: script, atomically: true, encoding: .utf8)
+        try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = [script.path, currentAppURL.path, newURL.path, String(getpid()),
+                             supportDir.appendingPathComponent("app-update.log").path]
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+    }
+
+    /// Set while an older version's update helper is still checking that this
+    /// build stays running (it removes the `.previous` copy when satisfied).
+    static var olderHelperStillWatching: Bool {
+        FileManager.default.fileExists(atPath: currentAppURL.path + ".previous")
+    }
+
+    private static let renameScript = """
+    #!/bin/sh
+    OLD="$1"; NEW="$2"; PID="$3"; LOG="$4"
+    log() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $*" >> "$LOG"; }
+
+    i=0
+    while kill -0 "$PID" 2>/dev/null; do
+        i=$((i+1))
+        if [ "$i" -gt 100 ]; then log "rename: app did not quit, giving up"; exit 1; fi
+        sleep 0.3
+    done
+
+    if ! mv "$OLD" "$NEW"; then
+        log "rename: could not rename, relaunching under the old name"; open "$OLD"; exit 1
+    fi
+    log "renamed to $NEW, launching"
+    open "$NEW"
+
+    sleep 8
+    if pgrep -f "$NEW/Contents/MacOS/" >/dev/null; then
+        log "renamed app is running"
+    else
+        log "renamed app did not stay running, restoring the old name"
+        mv "$NEW" "$OLD"
+        open "$OLD"
     fi
     """
 

@@ -1,13 +1,13 @@
 #!/bin/sh
 #
-# Packages a built VideoDownloader.app for sharing:
+# Packages a built Scorpena.app for sharing:
 #   - <Name>.zip  — plain archive
 #   - <Name>.dmg  — pretty window with an arrow → Applications
 #
 # Usage:
-#   Scripts/package.sh [/path/to/VideoDownloader.app] [output-dir]
+#   Scripts/package.sh [/path/to/Scorpena.app] [output-dir]
 #
-# With no path, the newest VideoDownloader.app in DerivedData is used.
+# With no path, the newest Scorpena.app in DerivedData is used.
 # Output defaults to ~/Desktop.
 
 set -eu
@@ -16,16 +16,16 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 APP="${1:-}"
 OUT="${2:-$HOME/Desktop}"
 BG="$HERE/dmg-background.png"
-VOL="VideoDownloader"
+VOL="Scorpena"
 
 # ---- locate the app --------------------------------------------------------
 if [ -z "$APP" ]; then
     APP="$(find "$HOME/Library/Developer/Xcode/DerivedData" \
-        -type d -name 'VideoDownloader.app' -path '*/Build/Products/*' 2>/dev/null \
+        -type d -name 'Scorpena.app' -path '*/Build/Products/*' 2>/dev/null \
         | xargs -I{} stat -f '%m %N' {} 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)"
 fi
 [ -n "$APP" ] && [ -d "$APP" ] || {
-    echo "VideoDownloader.app not found — build it in Xcode (Release) first."
+    echo "Scorpena.app not found — build it in Xcode (Release) first."
     exit 1
 }
 NAME="$(basename "$APP" .app)"
@@ -134,7 +134,26 @@ hdiutil convert "$TMP_DMG" -format UDZO -imagekey zlib-level=9 -o "$DMG" >/dev/n
 echo "→ $DMG"
 
 rm -f "$TMP_DMG"
-rm -rf "$STAGE" "$WORK"
+rm -rf "$STAGE"
+
+# ---- legacy dmg for apps that are already installed ----------------------------
+# Versions up to 2.1 update themselves from releases/latest/download/VideoDownloader.dmg
+# and look for VideoDownloader.app inside it. Keep that asset (same app, old folder
+# name) next to Scorpena.dmg so they can still reach this version.
+if [ "$NAME" = "Scorpena" ]; then
+    LEGACY_STAGE="$(mktemp -d)"
+    ditto "$APP" "$LEGACY_STAGE/VideoDownloader.app"
+    codesign --verify --deep --strict "$LEGACY_STAGE/VideoDownloader.app" \
+        || { echo "legacy copy: signature check FAILED"; exit 1; }
+    LEGACY_DMG="$OUT/VideoDownloader.dmg"
+    rm -f "$LEGACY_DMG"
+    hdiutil create -srcfolder "$LEGACY_STAGE" -volname "VideoDownloader" -fs HFS+ \
+        -format UDZO -imagekey zlib-level=9 "$LEGACY_DMG" >/dev/null
+    echo "→ $LEGACY_DMG   (for older versions' in-app update)"
+    rm -rf "$LEGACY_STAGE"
+fi
+
+rm -rf "$WORK"
 
 echo
 echo "Send $NAME.dmg (or .zip). First launch on another Mac:"

@@ -7,7 +7,7 @@ struct YouTubeDownloaderApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .frame(minWidth: 560, idealWidth: 850, minHeight: 590, idealHeight: 590)
+                .frame(minWidth: 560, idealWidth: 790, minHeight: 380, idealHeight: 590)
         }
         .windowResizability(.contentMinSize)
     }
@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        ToolAutoUpdater.recoverInterruptedSwap()
         DiagnosticReporter.reportPreviousCrashIfAny()
         DispatchQueue.main.asyncAfter(deadline: .now() + 25) { DiagnosticReporter.checkBundledTools() }
     }

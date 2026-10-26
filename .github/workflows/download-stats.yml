@@ -49,10 +49,10 @@ jobs:
           WEEKDAY=$(date -u +%u)
 
           if [ "$FIRST_RUN" = true ]; then
-            TEXT=$(printf '📊 VideoDownloader — статистика скачиваний\nНастроено. Всего скачиваний на сейчас: %s.\nСо следующего дня здесь будет прирост за сутки, а по воскресеньям — итог за неделю.' "$TOTAL")
+            TEXT=$(printf '📊 Scorpena – video downloader: статистика скачиваний\nНастроено. Всего скачиваний на сейчас: %s.\nСо следующего дня здесь будет прирост за сутки, а по воскресеньям — итог за неделю.' "$TOTAL")
             NEW_WEEK_START=$TOTAL
           else
-            TEXT=$(printf '📊 VideoDownloader — статистика скачиваний\nЗа день: %s\nВсего: %s' "$DAILY" "$TOTAL")
+            TEXT=$(printf '📊 Scorpena – video downloader: статистика скачиваний\nЗа день: %s\nВсего: %s' "$DAILY" "$TOTAL")
             if [ "$WEEKDAY" = "7" ]; then
               TEXT=$(printf '%s\n\n📅 Итог недели\nЗа неделю: %s\nВсего: %s' "$TEXT" "$WEEKLY" "$TOTAL")
               NEW_WEEK_START=$TOTAL

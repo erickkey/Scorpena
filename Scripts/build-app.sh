@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Builds VideoDownloader.app WITHOUT Xcode — just swiftc + Command Line Tools.
+# Builds Scorpena.app WITHOUT Xcode — just swiftc + Command Line Tools.
 # Produces a universal (arm64 + x86_64) ad-hoc signed .app.
 #
 # Usage:  Scripts/build-app.sh [output-dir]      (default: ~/Desktop)
@@ -11,7 +11,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
 SRC="$ROOT/YouTubeDownloader"
 OUT="${1:-$HOME/Desktop}"
-APP="$OUT/VideoDownloader.app"
+APP="$OUT/Scorpena.app"
 SDK="$(xcrun --show-sdk-path)"
 DT="13.0"
 BUNDLE_ID="com.yaroslavlukyanov.VideoDownloader"
@@ -20,7 +20,7 @@ DENO_TAG="v2.9.8"   # JS engine yt-dlp needs to solve YouTube challenges
 
 # Bump this for every release that should trigger the in-app "update available"
 # notice (must match the "version" in version.json on GitHub).
-APP_VERSION="2.1"
+APP_VERSION="3.0"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/bin"
@@ -42,9 +42,11 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleName</key><string>VideoDownloader</string>
-	<key>CFBundleDisplayName</key><string>VideoDownloader</string>
+	<key>CFBundleName</key><string>Scorpena</string>
+	<key>CFBundleDisplayName</key><string>Scorpena</string>
 	<key>CFBundleIdentifier</key><string>${BUNDLE_ID}</string>
+	<!-- the executable keeps its old name on purpose: apps that are already installed (≤ 2.1)
+	     check for Contents/MacOS/VideoDownloader before they accept an update -->
 	<key>CFBundleExecutable</key><string>VideoDownloader</string>
 	<key>CFBundlePackageType</key><string>APPL</string>
 	<key>CFBundleShortVersionString</key><string>${APP_VERSION}</string>
@@ -81,11 +83,23 @@ echo "==> resources"
 cp "$SRC/DownloadComplete.mp3" "$APP/Contents/Resources/"
 cp "$SRC/AppLaunch.mp3" "$APP/Contents/Resources/"
 
-echo "==> bundling yt-dlp + universal ffmpeg (~90 MB download)"
+echo "==> bundling yt-dlp (folder build, starts in <1 s) + universal ffmpeg (~110 MB download)"
 BIN="$APP/Contents/Resources/bin"
-curl -fL --retry 3 --retry-delay 2 -o "$BIN/yt-dlp" \
-    "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
+# The official "onedir" build: an executable plus an _internal folder next to
+# it. (The single-file build unpacks itself on every start — ~8 s.) It can't
+# update itself; the app's own updater (ToolAutoUpdater) replaces both parts.
+YTBASE="https://github.com/yt-dlp/yt-dlp/releases/latest/download"
+YTTMP="$(mktemp -d)"
+curl -fL --retry 3 --retry-delay 2 -o "$YTTMP/yt-dlp_macos.zip" "$YTBASE/yt-dlp_macos.zip"
+curl -fL --retry 3 --retry-delay 2 -o "$YTTMP/SHA2-256SUMS" "$YTBASE/SHA2-256SUMS"
+WANT="$(awk '$2=="yt-dlp_macos.zip"{print $1}' "$YTTMP/SHA2-256SUMS")"
+GOT="$(shasum -a 256 "$YTTMP/yt-dlp_macos.zip" | awk '{print $1}')"
+[ -n "$WANT" ] && [ "$WANT" = "$GOT" ] || { echo "yt-dlp checksum mismatch"; exit 1; }
+unzip -q -o "$YTTMP/yt-dlp_macos.zip" -d "$YTTMP/x"
+mv "$YTTMP/x/yt-dlp_macos" "$BIN/yt-dlp"
+mv "$YTTMP/x/_internal" "$BIN/_internal"
 chmod +x "$BIN/yt-dlp"
+rm -rf "$YTTMP"
 
 base="https://github.com/eugeneware/ffmpeg-static/releases/download/${FFMPEG_TAG}"
 curl -fL --retry 3 --retry-delay 2 -o "$BIN/.ff-arm64" "$base/ffmpeg-darwin-arm64"
@@ -109,6 +123,8 @@ for t in yt-dlp ffmpeg deno; do
     codesign --verify --quiet "$BIN/$t" 2>/dev/null \
         || codesign --force --sign - --timestamp=none "$BIN/$t"
 done
+# (yt-dlp's _internal files keep the signatures they shipped with; the app-level
+#  `codesign --deep` below re-seals the whole bundle)
 
 echo "==> ad-hoc signing the app"
 xattr -cr "$APP" 2>/dev/null || true

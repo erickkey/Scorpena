@@ -2,12 +2,19 @@ import Foundation
 
 /// Silent, at-most-once-a-day update of the yt-dlp that ships inside the app.
 ///
+/// The bundled yt-dlp is the official "onedir" build — `bin/yt-dlp` plus the
+/// `bin/_internal` folder next to it. It starts in a fraction of a second
+/// (the single-file build needed ~8 s per launch), but it can't update itself,
+/// so this does it:
+///
 /// - Stable channel only: it only ever moves to the latest GitHub release
 ///   (never nightly), and only when that release is newer than what's installed.
-/// - Safe: the current binary is copied aside first. After updating, the new
-///   one must run and report the expected version, and must be able to read a
-///   known public video. If it can't but the old one still can, the old one
-///   is put back and that version is skipped from then on.
+/// - The download is checked against the SHA-256 list published with the release.
+/// - Safe: the new build is unpacked beside the old one and must run, report
+///   the expected version and read a known public video *before* anything is
+///   swapped. If it can't but the old one still can, the old one stays and that
+///   version is skipped from then on. The swap itself is two renames; the old
+///   build is kept until the new one has started once more from its final place.
 /// - Everything is written to `tool-update.log` in Application Support, so a
 ///   "stopped working" report can be traced to an update.
 final class ToolAutoUpdater {
@@ -29,8 +36,8 @@ final class ToolAutoUpdater {
         return dir
     }()
 
-    /// The four steps of an update, for the progress line in «Дополнительно».
-    enum Stage: Int { case checking = 1, backingUp, downloading, verifying }
+    /// The steps of an update, for the progress line in «Дополнительно».
+    enum Stage: Int { case checking = 1, downloading, unpacking, verifying }
 
     enum Outcome {
         case upToDate(String)
@@ -73,15 +80,49 @@ final class ToolAutoUpdater {
         }
     }
 
+    // MARK: Folders next to the live binary
+
+    private static func newDir(in bin: URL) -> URL { bin.appendingPathComponent(".ytdlp-new", isDirectory: true) }
+    private static func oldDir(in bin: URL) -> URL { bin.appendingPathComponent(".ytdlp-old", isDirectory: true) }
+
+    /// If the app was quit in the middle of a swap (the live yt-dlp is missing
+    /// but the previous build is still parked aside), puts the previous build
+    /// back; otherwise just clears leftovers. Call once at launch.
+    static func recoverInterruptedSwap() {
+        guard let binPath = ToolLocator.bundledBinDirectory else { return }
+        let bin = URL(fileURLWithPath: binPath, isDirectory: true)
+        let fm = FileManager.default
+        let old = oldDir(in: bin)
+        let liveOK = fm.isExecutableFile(atPath: bin.appendingPathComponent("yt-dlp").path)
+            && fm.fileExists(atPath: bin.appendingPathComponent("_internal").path)
+        if !liveOK, fm.fileExists(atPath: old.path) {
+            for name in ["yt-dlp", "_internal"] {
+                let live = bin.appendingPathComponent(name), parked = old.appendingPathComponent(name)
+                if fm.fileExists(atPath: parked.path) {
+                    try? fm.removeItem(at: live)
+                    try? fm.moveItem(at: parked, to: live)
+                }
+            }
+        }
+        try? fm.removeItem(at: old)
+        try? fm.removeItem(at: newDir(in: bin))
+    }
+
     // MARK: Update flow (background queue)
 
-    /// Starting yt-dlp takes ~8 s on its own (the single-file build unpacks
-    /// itself and macOS scans every piece), so launches are kept to a minimum:
-    /// the installed version is passed in when it's already known, and the
-    /// result of the update is read from the updater's own output.
+    /// Starting a yt-dlp that macOS hasn't seen yet takes ~8 s once, so the
+    /// installed version is passed in when it's already known and launches are
+    /// kept to a minimum.
     private func update(ytDlp: String, knownVersion: String?, stage: ((Stage) -> Void)? = nil) -> Outcome {
         let defaults = UserDefaults.standard
+        let fm = FileManager.default
         stage?(.checking)
+
+        let bin = URL(fileURLWithPath: ytDlp).deletingLastPathComponent()
+        guard fm.fileExists(atPath: bin.appendingPathComponent("_internal").path) else {
+            log("this yt-dlp isn't the folder build — not updating it")
+            return .failed
+        }
         let cached = knownVersion?.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let current = (cached?.isEmpty == false ? cached : nil)
                 ?? DownloadManager.captureOutput(ytDlp, ["--version"])?
@@ -100,46 +141,90 @@ final class ToolAutoUpdater {
             log("skipping \(latest): it failed the self-check earlier")
             return .keptOld(current: current, rejected: latest)
         }
-
         log("updating \(current) -> \(latest)")
-        stage?(.backingUp)
-        guard let backup = makeBackup(of: ytDlp, version: current) else {
-            log("could not back up the current version — not updating")
+
+        let fresh = Self.newDir(in: bin), parked = Self.oldDir(in: bin)
+        try? fm.removeItem(at: fresh)
+        try? fm.removeItem(at: parked)
+        defer { try? fm.removeItem(at: fresh) }
+
+        // 1. download + checksum
+        stage?(.downloading)
+        let download = supportDir.appendingPathComponent("Update", isDirectory: true)
+        try? fm.removeItem(at: download)
+        try? fm.createDirectory(at: download, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: download) }
+        let zip = download.appendingPathComponent("yt-dlp_macos.zip")
+        let base = "https://github.com/yt-dlp/yt-dlp/releases/download/\(latest)/"
+        guard Self.download(URL(string: base + "yt-dlp_macos.zip")!, to: zip, timeout: 300) else {
+            log("download failed")
+            return .offline
+        }
+        guard let sums = Self.fetchText(URL(string: base + "SHA2-256SUMS")!),
+              let expected = Self.expectedHash(in: sums, file: "yt-dlp_macos.zip"),
+              let actual = Self.sha256(of: zip), expected == actual
+        else {
+            log("checksum of \(latest) did not match — not installing it")
+            DiagnosticReporter.report(.ytDlpRolledBack,
+                details: "yt-dlp \(current) → \(latest): контрольная сумма скачанного файла не совпала, обновление отменено.")
+            return .keptOld(current: current, rejected: latest)
+        }
+
+        // 2. unpack beside the live copy (same volume → the swap is a rename)
+        stage?(.unpacking)
+        do {
+            try fm.createDirectory(at: fresh, withIntermediateDirectories: true)
+            guard Self.runPlain("/usr/bin/ditto", ["-x", "-k", zip.path, fresh.path]) == 0 else { throw CocoaError(.fileReadCorruptFile) }
+            try fm.moveItem(at: fresh.appendingPathComponent("yt-dlp_macos"), to: fresh.appendingPathComponent("yt-dlp"))
+            _ = Self.runPlain("/usr/bin/xattr", ["-cr", fresh.path])
+            guard fm.isExecutableFile(atPath: fresh.appendingPathComponent("yt-dlp").path),
+                  fm.fileExists(atPath: fresh.appendingPathComponent("_internal").path)
+            else { throw CocoaError(.fileReadCorruptFile) }
+        } catch {
+            log("unpacking failed: \(error.localizedDescription)")
             return .failed
         }
 
-        stage?(.downloading)
-        let result = Self.run(ytDlp, ["--update-to", "stable"], timeout: 240)
-        var installed: String? = nil
-        if let result, result.status == 0, result.output.contains("Updated yt-dlp to stable@\(latest)") {
-            installed = latest
-        } else {
-            installed = DownloadManager.captureOutput(ytDlp, ["--version"])?   // slow path, only if the output wasn't recognised
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        guard installed == latest else {
-            log("update did not produce \(latest) (got \(installed ?? "nothing")) — rolling back")
+        // 3. the new build must work before it replaces anything
+        stage?(.verifying)
+        let candidate = fresh.appendingPathComponent("yt-dlp").path
+        let reported = DownloadManager.captureOutput(candidate, ["--version"])?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard reported == latest else {
+            log("new build reports \(reported ?? "nothing"), expected \(latest) — not installing")
             DiagnosticReporter.report(.ytDlpRolledBack,
-                details: "yt-dlp \(current) → \(latest): после обновления версия \(installed ?? "не определилась"), откат.")
-            restore(backup, over: ytDlp)
+                details: "yt-dlp \(current) → \(latest): новая версия не запустилась (ответ: \(reported ?? "ничего")), осталась \(current).")
             defaults.set(latest, forKey: skippedVersionKey)
             return .keptOld(current: current, rejected: latest)
+        }
+        if !canary(candidate) {
+            if canary(ytDlp) {
+                log("\(latest) failed the self-check but \(current) works — keeping \(current)")
+                DiagnosticReporter.report(.ytDlpRolledBack,
+                    details: "yt-dlp \(latest) не прошёл самопроверку на YouTube, а \(current) работает — остаётся \(current).")
+                defaults.set(latest, forKey: skippedVersionKey)
+                return .keptOld(current: current, rejected: latest)
+            }
+            log("self-check failed for both versions (network or site problem) — installing \(latest) anyway")
         }
 
-        stage?(.verifying)
-        if canary(ytDlp) {
-            log("updated to \(latest), self-check passed")
-            return .updated(from: current, to: latest)
+        // 4. swap: live → parked, new → live; undo everything if anything fails
+        guard swap(bin: bin, fresh: fresh, parked: parked) else {
+            log("could not swap the files in (is the app folder writable?) — keeping \(current)")
+            return .failed
         }
-        if canary(backup.path) {
-            log("\(latest) failed the self-check but \(current) works — rolling back")
+        let after = DownloadManager.captureOutput(ytDlp, ["--version"])?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if after != latest {
+            log("after the swap yt-dlp reports \(after ?? "nothing") — putting \(current) back")
             DiagnosticReporter.report(.ytDlpRolledBack,
-                details: "yt-dlp \(latest) не прошёл самопроверку на YouTube, а \(current) работает — откат на \(current).")
-            restore(backup, over: ytDlp)
+                details: "yt-dlp \(current) → \(latest): после замены файлов версия \(after ?? "не определилась"), откат.")
+            swapBack(bin: bin, parked: parked)
             defaults.set(latest, forKey: skippedVersionKey)
             return .keptOld(current: current, rejected: latest)
         }
-        log("updated to \(latest); self-check failed for both versions (network or site problem) — keeping the new one")
+        try? fm.removeItem(at: parked)
+        log("updated to \(latest), self-check passed")
         return .updated(from: current, to: latest)
     }
 
@@ -150,41 +235,87 @@ final class ToolAutoUpdater {
         return result.status == 0 && !result.output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    // MARK: Backup / rollback
+    // MARK: Swap / rollback
 
-    private func makeBackup(of ytDlp: String, version: String) -> URL? {
+    private func swap(bin: URL, fresh: URL, parked: URL) -> Bool {
         let fm = FileManager.default
-        let dir = supportDir.appendingPathComponent("Backup", isDirectory: true)
-        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
-        for old in (try? fm.contentsOfDirectory(atPath: dir.path)) ?? [] {
-            try? fm.removeItem(at: dir.appendingPathComponent(old))
-        }
-        let target = dir.appendingPathComponent("yt-dlp-\(version)")
         do {
-            try fm.copyItem(atPath: ytDlp, toPath: target.path)
-            return target
+            try fm.createDirectory(at: parked, withIntermediateDirectories: true)
+            try fm.moveItem(at: bin.appendingPathComponent("yt-dlp"), to: parked.appendingPathComponent("yt-dlp"))
+            try fm.moveItem(at: bin.appendingPathComponent("_internal"), to: parked.appendingPathComponent("_internal"))
+            try fm.moveItem(at: fresh.appendingPathComponent("yt-dlp"), to: bin.appendingPathComponent("yt-dlp"))
+            try fm.moveItem(at: fresh.appendingPathComponent("_internal"), to: bin.appendingPathComponent("_internal"))
+            return true
         } catch {
-            return nil
+            log("swap step failed: \(error.localizedDescription)")
+            swapBack(bin: bin, parked: parked)
+            return false
         }
     }
 
-    /// Copies the backup next to the live file, then swaps it in with an
-    /// atomic rename, so a download starting at that moment never finds the
-    /// file missing.
-    private func restore(_ backup: URL, over ytDlp: String) {
+    /// Puts the parked (previous) build back in place of whatever is live.
+    private func swapBack(bin: URL, parked: URL) {
         let fm = FileManager.default
-        let temp = ytDlp + ".rollback"
-        try? fm.removeItem(atPath: temp)
-        do {
-            try fm.copyItem(atPath: backup.path, toPath: temp)
-            guard rename(temp, ytDlp) == 0 else { throw CocoaError(.fileWriteUnknown) }
-            let restored = DownloadManager.captureOutput(ytDlp, ["--version"])?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? "?"
-            log("rolled back, installed version is now \(restored)")
-        } catch {
-            try? fm.removeItem(atPath: temp)
-            log("ROLLBACK FAILED: \(error.localizedDescription)")
+        for name in ["yt-dlp", "_internal"] {
+            let live = bin.appendingPathComponent(name), old = parked.appendingPathComponent(name)
+            guard fm.fileExists(atPath: old.path) else { continue }
+            try? fm.removeItem(at: live)
+            do { try fm.moveItem(at: old, to: live) } catch { log("ROLLBACK FAILED for \(name): \(error.localizedDescription)") }
         }
+        try? fm.removeItem(at: parked)
+        let restored = DownloadManager.captureOutput(bin.appendingPathComponent("yt-dlp").path, ["--version"])?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "?"
+        log("rolled back, installed version is now \(restored)")
+    }
+
+    // MARK: Network + hashing
+
+    private static func download(_ url: URL, to destination: URL, timeout: TimeInterval) -> Bool {
+        let semaphore = DispatchSemaphore(value: 0)
+        var ok = false
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 60
+        let task = URLSession.shared.downloadTask(with: request) { temp, response, _ in
+            defer { semaphore.signal() }
+            guard let temp, (response as? HTTPURLResponse)?.statusCode == 200 else { return }
+            try? FileManager.default.removeItem(at: destination)
+            ok = (try? FileManager.default.moveItem(at: temp, to: destination)) != nil
+        }
+        task.resume()
+        if semaphore.wait(timeout: .now() + timeout) == .timedOut { task.cancel(); return false }
+        return ok
+    }
+
+    private static func fetchText(_ url: URL) -> String? {
+        let semaphore = DispatchSemaphore(value: 0)
+        var text: String?
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 20
+        URLSession.shared.dataTask(with: request) { data, response, _ in
+            defer { semaphore.signal() }
+            guard let data, (response as? HTTPURLResponse)?.statusCode == 200 else { return }
+            text = String(data: data, encoding: .utf8)
+        }.resume()
+        _ = semaphore.wait(timeout: .now() + 25)
+        return text
+    }
+
+    /// "<hash>  <file>" lines, as in yt-dlp's SHA2-256SUMS.
+    private static func expectedHash(in sums: String, file: String) -> String? {
+        for line in sums.split(separator: "\n") {
+            let parts = line.split(whereSeparator: { $0 == " " || $0 == "\t" || $0 == "*" })
+            if parts.count >= 2, parts.last.map(String.init) == file { return String(parts[0]).lowercased() }
+        }
+        return nil
+    }
+
+    private static func sha256(of file: URL) -> String? {
+        run("/usr/bin/shasum", ["-a", "256", file.path], timeout: 120)?
+            .output.split(separator: " ").first.map { String($0).lowercased() }
+    }
+
+    private static func runPlain(_ path: String, _ args: [String]) -> Int32 {
+        run(path, args, timeout: 300)?.status ?? -1
     }
 
     // MARK: Helpers

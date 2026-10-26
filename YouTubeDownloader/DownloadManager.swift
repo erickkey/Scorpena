@@ -11,6 +11,7 @@ final class DownloadManager: ObservableObject {
         case running
         case finished
         case cancelled
+        case paused                                      // stopped by the user, can be resumed
         case failed(String)
     }
 
@@ -35,7 +36,17 @@ final class DownloadManager: ObservableObject {
 
     // MARK: Published state (mutated on the main queue only)
 
-    @Published private(set) var phase: Phase = .idle
+    @Published private(set) var phase: Phase = .idle {
+        didSet {
+            // A finished, failed or cancelled download is nothing to resume later.
+            switch phase {
+            case .finished, .failed, .cancelled: UnfinishedDownload.clear()
+            default: break
+            }
+        }
+    }
+    /// True while a download (not a conversion) is at the stage where pausing is safe.
+    @Published private(set) var canPause = false
     @Published private(set) var progress: Double = 0          // 0.0 ... 1.0
     @Published private(set) var indeterminate = false         // brew jobs have no %
     @Published private(set) var statusLine: String = ""
@@ -111,6 +122,14 @@ final class DownloadManager: ObservableObject {
     private var pendingMaxHeight: Int?
     private var pendingAudioOnly = false
     private var pendingStripAudio = false
+    private var pendingVideoFormat: VideoFormat = .mp4
+    private var pendingAudioFormat: AudioFormat = .mp3
+    private var pendingSpeedLimit = 0
+    private var userPaused = false
+    private var runningSpeedLimit = 0          // limit the current yt-dlp process was started with
+    private var resumeAfterPause = false       // a "pause" that is really a restart (new speed limit)
+    private var restartStartTime: Date?
+    private var speedApplyWork: DispatchWorkItem?
     private var downloadStartTime: Date?
     private var cookieQueue: [CookieSource] = []
     private var currentCookieSource: CookieSource = .none
@@ -130,6 +149,7 @@ final class DownloadManager: ObservableObject {
     }
 
     var isRunning: Bool { phase == .running }
+    var isPaused: Bool { phase == .paused }
     var toolsReady: Bool { ytDlpPath != nil && ffmpegPath != nil }
     var hasHomebrew: Bool { brewPath != nil }
 
@@ -182,7 +202,55 @@ final class DownloadManager: ObservableObject {
     }
 
     func cancel() {
+        if isPaused {
+            phase = .cancelled
+            statusLine = tr("Отменено")
+            return
+        }
         process?.terminate()
+    }
+
+    /// Called when the speed slider moves. yt-dlp can't change its limit while
+    /// running, so the download is restarted from its partial file with the new
+    /// one (after a short pause, so dragging the slider doesn't restart it each step).
+    func speedLimitChanged() {
+        speedApplyWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.applySpeedLimitIfNeeded() }
+        speedApplyWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: work)
+    }
+
+    private func applySpeedLimitIfNeeded() {
+        guard isRunning, canPause, case .download = currentJob,
+              SpeedLimit.current != runningSpeedLimit else { return }
+        restartStartTime = downloadStartTime
+        userPaused = true
+        resumeAfterPause = true
+        process?.terminate()
+    }
+
+    /// Stops yt-dlp but keeps the partly downloaded file; `resume` continues it.
+    func pause() {
+        guard isRunning, canPause, case .download = currentJob else { return }
+        userPaused = true
+        process?.terminate()
+    }
+
+    func resume() {
+        guard isPaused, let saved = UnfinishedDownload.saved else { return }
+        resume(saved)
+    }
+
+    /// Runs the same request again; yt-dlp picks up the partial file.
+    func resume(_ saved: UnfinishedDownload) {
+        guard !isRunning else { return }
+        start(urlString: saved.url,
+              destination: URL(fileURLWithPath: saved.destination, isDirectory: true),
+              maxHeight: saved.maxHeight,
+              audioOnly: saved.audioOnly,
+              stripAudio: saved.stripAudio,
+              videoFormat: VideoFormat(rawValue: saved.videoFormat) ?? .mp4,
+              audioFormat: AudioFormat(rawValue: saved.audioFormat) ?? .mp3)
     }
 
     // MARK: Quality probe
@@ -419,9 +487,9 @@ final class DownloadManager: ObservableObject {
         let what: String
         switch stage {
         case .checking:    what = tr("Проверяю на GitHub, вышла ли новая версия…")
-        case .backingUp:   what = tr("Сохраняю копию текущей версии — на случай отката…")
-        case .downloading: what = tr("Скачиваю и ставлю новую версию (около 36 МБ)…")
-        case .verifying:   what = tr("Проверяю, что новая версия работает с YouTube…")
+        case .downloading: what = tr("Скачиваю новую версию (около 54 МБ) и сверяю контрольную сумму…")
+        case .unpacking:   what = tr("Распаковываю новую версию рядом со старой…")
+        case .verifying:   what = tr("Проверяю, что новая версия работает с YouTube, и только потом заменяю…")
         }
         let elapsed = Int(Date().timeIntervalSince(start))
         var text = trf("Шаг %d из 4 · %@", stage.rawValue, what) + " · " + trf("%d с", elapsed)
@@ -527,7 +595,9 @@ final class DownloadManager: ObservableObject {
                destination: URL,
                maxHeight: Int?,
                audioOnly: Bool = false,
-               stripAudio: Bool = false) {
+               stripAudio: Bool = false,
+               videoFormat: VideoFormat = .current,
+               audioFormat: AudioFormat = .current) {
 
         guard !isRunning else { return }
 
@@ -549,6 +619,15 @@ final class DownloadManager: ObservableObject {
         pendingMaxHeight = maxHeight
         pendingAudioOnly = audioOnly
         pendingStripAudio = stripAudio
+        pendingVideoFormat = videoFormat
+        pendingAudioFormat = audioFormat
+        pendingSpeedLimit = SpeedLimit.current
+        userPaused = false
+        canPause = false
+        UnfinishedDownload(url: url, destination: destination.path, maxHeight: maxHeight,
+                           audioOnly: audioOnly, stripAudio: stripAudio,
+                           videoFormat: videoFormat.rawValue, audioFormat: audioFormat.rawValue,
+                           name: nil).save()
         downloadStartTime = Date()
         lastDestination = destination
         lastDownloadedFile = nil
@@ -592,25 +671,47 @@ final class DownloadManager: ObservableObject {
             destination.appendingPathComponent(name).path
         }
 
+        runningSpeedLimit = pendingSpeedLimit
         var arguments: [String] = [
             "--newline",
             "--no-color",
             "--no-playlist",
             "--ffmpeg-location", ffmpegDir,
             // Pull DASH/HLS fragments in parallel — big speed-up for Vimeo etc.
-            "--concurrent-fragments", "5",
-        ] + Self.jsRuntimeArgs()
+            // (With a speed limit, one at a time: yt-dlp applies the limit to each
+            // parallel fragment, so five of them would run five times too fast.)
+            "--concurrent-fragments", pendingSpeedLimit > 0 ? "1" : "5",
+            // A dropped connection isn't an error: wait (1 → 20 s between tries)
+            // and carry on from the partial file.
+            "--retries", "60", "--fragment-retries", "60",
+            "--retry-sleep", "http:exp=1:20", "--retry-sleep", "fragment:exp=1:20",
+            "--socket-timeout", "20",
+        ] + SpeedLimit.ytDlpArgs(pendingSpeedLimit) + Self.jsRuntimeArgs()
         if pendingAudioOnly {
+            arguments += pendingAudioFormat.ytDlpArgs
             arguments += [
-                "-f", "ba/b",
-                "-x", "--audio-format", "mp3", "--audio-quality", "320K",
-                // «Название (VideoDownloader).mp3»
-                "-o", outTemplate("%(title)s (VideoDownloader).%(ext)s"),
+                // «Название (Scorpena video downloader).mp3»
+                "-o", outTemplate("%(title)s (Scorpena video downloader).%(ext)s"),
             ]
         } else {
             let formatSpec: String
             let sortSpec: String
-            if pendingStripAudio {
+            if pendingVideoFormat == .webm {
+                // WebM: take the site's own WebM streams (VP9/AV1 + Opus) when it has
+                // them; anything else is re-encoded into WebM afterwards.
+                let hf = heightFilter
+                formatSpec = pendingStripAudio
+                    ? "bv*[ext=webm]\(hf)/bv*\(hf)/b\(hf)"
+                    : "bv*[ext=webm]\(hf)+ba[ext=webm]/bv*\(hf)+ba/b\(hf)/bv*+ba/b"
+                sortSpec = "res,vcodec:vp9,br"
+            } else if pendingVideoFormat == .mkv {
+                // MKV holds anything: the best streams the site has, no H.264 preference.
+                let hf = heightFilter
+                formatSpec = pendingStripAudio
+                    ? (pendingMaxHeight != nil ? "bv*\(hf)/b\(hf)" : "bv*/b")
+                    : (pendingMaxHeight != nil ? "bv*\(hf)+ba/b\(hf)/bv*+ba/b" : "bv*+ba/b")
+                sortSpec = "res,br"
+            } else if pendingStripAudio {
                 // Video only, no audio track at all.
                 formatSpec = pendingMaxHeight != nil
                     ? "bv*\(heightFilter)/b\(heightFilter)"
@@ -627,13 +728,16 @@ final class DownloadManager: ObservableObject {
                 formatSpec = "bv*[vcodec^=avc1]+ba/b[vcodec^=avc1]/bv*+ba/b"
                 sortSpec = "vcodec:h264,res,ext:mp4,br"
             }
+            arguments += ["-f", formatSpec, "-S", sortSpec]
+            switch pendingVideoFormat {
+            case .mp4:  arguments += ["--merge-output-format", "mp4", "--remux-video", "mp4"]
+            case .mov:  arguments += ["--merge-output-format", "mov", "--remux-video", "mov"]
+            case .mkv:  arguments += ["--merge-output-format", "mkv", "--remux-video", "mkv"]
+            case .webm: arguments += ["--merge-output-format", "webm", "--recode-video", "webm"]
+            }
             arguments += [
-                "-f", formatSpec,
-                "-S", sortSpec,
-                "--merge-output-format", "mp4",
-                "--remux-video", "mp4",
-                // «Название (VideoDownloader) 1920x1080.mp4»
-                "-o", outTemplate("%(title)s (VideoDownloader) %(width)sx%(height)s.%(ext)s"),
+                // «1920x1080 Название (Scorpena video downloader).mp4»
+                "-o", outTemplate("%(width)sx%(height)s %(title)s (Scorpena video downloader).%(ext)s"),
             ]
         }
         arguments += source.ytDlpArgs
@@ -790,7 +894,14 @@ final class DownloadManager: ObservableObject {
             return
         }
 
+        if line.contains("Retrying") || line.contains("Got error") {
+            statusLine = tr("Нет связи — жду и продолжу сам…")
+            return
+        }
+
         if let percent = Self.parsePercent(line) {
+            canPause = true
+            applySpeedLimitIfNeeded()
             progress = min(percent / 100, 1)
             if line.contains("(frag ") { fragmentedDownload = true }
             var s = (pendingAudioOnly ? tr("Скачивание аудио… ") : tr("Скачивание… ")) + "\(Int(percent))%"
@@ -798,16 +909,35 @@ final class DownloadManager: ObservableObject {
             if let speed = Self.parseSpeed(line) { s += " · \(speed)" }
             statusLine = s
         } else if line.contains("[ExtractAudio]") {
-            statusLine = tr("Конвертация в MP3 320 kbps…")
+            canPause = false
+            statusLine = pendingAudioFormat.convertingStatus
         } else if line.contains("[Merger]") {
+            canPause = false
             statusLine = tr("Объединение видео и звука…")
         } else if line.contains("[VideoRemuxer]") || line.contains("[VideoConvertor]") || line.contains("[Recode]") {
-            statusLine = tr("Упаковка в MP4…")
+            canPause = false
+            statusLine = trf("Упаковка в %@…", pendingVideoFormat.title)
         } else if line.contains("Destination:") {
+            rememberFileName(from: line)
             statusLine = pendingAudioOnly ? tr("Скачивание аудио…") : tr("Скачивание…")
         } else if line.lowercased().contains("error") {
             statusLine = line.trimmingCharacters(in: .whitespaces)
         }
+    }
+
+    /// "[download] Destination: /…/1920x1080 Name (…).f137.mp4" → "Name" — only
+    /// used to say what's unfinished if the app has to ask about it later.
+    private func rememberFileName(from line: String) {
+        guard let range = line.range(of: "Destination:") else { return }
+        var name = (String(line[range.upperBound...]).trimmingCharacters(in: .whitespaces) as NSString)
+            .lastPathComponent
+        name = (name as NSString).deletingPathExtension
+        name = name.replacingOccurrences(of: #"\.f\d+$"#, with: "", options: .regularExpression)
+        name = name.replacingOccurrences(of: " (Scorpena video downloader)", with: "")
+        name = name.replacingOccurrences(of: #"^\d+x\d+ "#, with: "", options: .regularExpression)
+        guard !name.isEmpty, var saved = UnfinishedDownload.saved else { return }
+        saved.name = String(name.prefix(80))
+        saved.save()
     }
 
     private func appendLog(_ line: String) {
@@ -854,7 +984,24 @@ final class DownloadManager: ObservableObject {
 
         let job = currentJob
 
+        canPause = false
         if reason == .uncaughtSignal {
+            if userPaused, case .download = job {
+                userPaused = false
+                cookieQueue.removeAll()
+                phase = .paused
+                if resumeAfterPause {
+                    // A new speed limit: carry straight on from the partial file.
+                    resumeAfterPause = false
+                    let started = restartStartTime
+                    resume()
+                    if let started { downloadStartTime = started }
+                    return
+                }
+                statusLine = tr("Пауза — нажми «Продолжить»")
+                return
+            }
+            userPaused = false
             phase = .cancelled
             statusLine = tr("Отменено")
             cookieQueue.removeAll()
@@ -870,10 +1017,12 @@ final class DownloadManager: ObservableObject {
                 UserDefaults.standard.set(currentCookieSource.storageKey, forKey: lastCookieKey)
                 cookieQueue.removeAll()
                 if pendingAudioOnly {
-                    markVideoFinished(tr("Готово ✅ (MP3 320 kbps)"),
-                                      file: newestDownloadedFile(extensions: ["mp3"]))
-                } else {
+                    markVideoFinished(trf("Готово ✅ (%@)", pendingAudioFormat.resultName),
+                                      file: newestDownloadedFile(extensions: pendingAudioFormat.fileExtensions))
+                } else if pendingVideoFormat.convertsToH264 {
                     checkCodecThenFinish()
+                } else {
+                    markVideoFinished(tr("Готово ✅"), file: newestDownloadedFile(extensions: VideoFormat.fileExtensions))
                 }
             case .transcode:
                 finalizeTranscode(ok: true)
@@ -984,7 +1133,7 @@ final class DownloadManager: ObservableObject {
             return tr("""
             Это видео требует входа в аккаунт. Чтобы взять cookies из браузера, приложению нужен \
             доступ к диску. Нажмите «Открыть настройки» — в списке приложений найдите \
-            VideoDownloader и включите «Полный доступ к диску» (если его там нет — нажмите \
+            Scorpena и включите «Полный доступ к диску» (если его там нет — нажмите \
             «Показать приложение», это откроет его в Finder, перетащите оттуда). Перезапустите \
             приложение и повторите.
             """)
@@ -1071,7 +1220,7 @@ final class DownloadManager: ObservableObject {
         }
 
         let output = input.deletingPathExtension()
-            .appendingPathExtension("h264.mp4")
+            .appendingPathExtension("h264." + (input.pathExtension.isEmpty ? "mp4" : input.pathExtension))
         try? FileManager.default.removeItem(at: output)
 
         transcodeInput = input

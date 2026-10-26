@@ -165,15 +165,12 @@ enum Translations {
         "Обновлено: %@ → %@ ✅ (за %d с)": "Updated: %@ → %@ ✅ (in %d s)",
         "Шаг %d из 4 · %@": "Step %d of 4 · %@",
         "Проверяю на GitHub, вышла ли новая версия…": "Checking GitHub for a new version…",
-        "Сохраняю копию текущей версии — на случай отката…": "Saving a copy of the current version — in case of a rollback…",
-        "Скачиваю и ставлю новую версию (около 36 МБ)…": "Downloading and installing the new version (about 36 MB)…",
-        "Проверяю, что новая версия работает с YouTube…": "Checking that the new version works with YouTube…",
         "Обычно занимает до минуты.": "Usually takes up to a minute.",
         "yt-dlp %@": "yt-dlp %@",
         "Новая версия %@ не прошла проверку — оставил %@.": "The new version %@ didn't pass the check — kept %@.",
         "Не удалось проверить обновления — нет связи с интернетом.": "Couldn't check for updates — no internet connection.",
         "Отправлять разработчику анонимные отчёты о сбоях": "Send anonymous crash reports to the developer",
-        "Только версии программы и системы и тип ошибки — без ссылок и личных данных.": "Only app and system versions and the type of error — no links or personal data.",
+        "Анонимно, без ссылок и личных данных.": "Anonymous, no links or personal data.",
         "Дождись окончания скачивания и нажми кнопку обновления ещё раз.": "Wait for the download to finish, then press the update button again.",
         "Вышла новая версия %@": "Version %@ is out",
         "Обновимся прямо сейчас? Займёт около минуты, программа сама перезапустится. Настройки и история сохранятся.": "Update right now? It takes about a minute and the app restarts by itself. Your settings and history are kept.",
@@ -220,6 +217,34 @@ enum Translations {
             "“Feedback” — a dedicated section: write a question, a suggestion, or anything else, optionally leaving your name and contact.",
         "Можно запомнить нужный размер окна — при выходе программа спросит, сохранить ли его.":
             "You can save your preferred window size — the app asks whether to remember it when you quit.",
+        "Scorpena – теперь это новое название. Добавь заново значок в Dock и погнали качать": "Scorpena is the new name. Add the Dock icon again and let's get downloading",
+        "Программа переименована": "The app has been renamed",
+        "Переименовываю…": "Renaming…",
+        "Секунду, сейчас программа перезапустится.": "One moment — the app is about to restart.",
+        "Ладно": "OK",
+        "Теперь она называется Scorpena – video downloader. Настройки и история на месте. Программа один раз перезапустится, а значок в Dock нужно будет закрепить заново. Если рядом осталась старая копия, её можно удалить.": "It's now called Scorpena – video downloader. Your settings and history are untouched. The app will restart once, and you'll need to pin its Dock icon again. If an old copy is left next to it, you can delete it.",
+        "Теперь она называется Scorpena – video downloader. Настройки и история на месте. Если рядом осталась старая копия, её можно удалить.": "It's now called Scorpena – video downloader. Your settings and history are untouched. If an old copy is left next to it, you can delete it.",
+        "Скачиваю новую версию (около 54 МБ) и сверяю контрольную сумму…": "Downloading the new version (about 54 MB) and checking its checksum…",
+        "Распаковываю новую версию рядом со старой…": "Unpacking the new version next to the old one…",
+        "Проверяю, что новая версия работает с YouTube, и только потом заменяю…": "Checking that the new version works with YouTube, and only then replacing…",
+        "Без ограничения": "No limit",
+        "Если надо замедлиться. Скорость указана и в мегабитах — как в тарифе провайдера, и в мегабайтах": "If you need to slow it down. The speed is shown both in megabits — like on your internet plan — and in megabytes",
+        "%d Мбит/с": "%d Mbit/s",
+        "≈ %@ МБ/с": "≈ %@ MB/s",
+        "Конвертация в M4A…": "Converting to M4A…",
+        "Конвертация в WAV…": "Converting to WAV…",
+        "Упаковка в %@…": "Packing into %@…",
+        "Формат видео": "Video format",
+        "Формат звука": "Audio format",
+        "Скорость скачивания": "Download speed",
+        "Пауза": "Pause",
+        "Продолжить": "Resume",
+        "Пауза — нажми «Продолжить»": "Paused — press “Resume”",
+        "Нет связи — жду и продолжу сам…": "No connection — waiting, will carry on by itself…",
+        "Скачивание не закончилось": "The download didn't finish",
+        "Не докачано: %@. Продолжить с того места, где остановилось?": "Not finished: %@. Continue from where it stopped?",
+        "Не нужно": "No thanks",
+        "Готово ✅ (%@)": "Done ✅ (%@)",
         "Обновление программы теперь одной кнопкой (наконец-то).": "Updating the app is now one button (finally).",
         "Встроенный загрузчик обновляется сам.": "The built-in downloader updates itself.",
         "История скачиваний.": "Download history.",
@@ -233,18 +258,19 @@ enum Translations {
         "Если видео перестало скачиваться — нажмите «Проверить сейчас» в разделе «Дополнительно». Сайты периодически меняют защиту, обновление её догоняет.":
             "If videos stop downloading, click “Check now” in the “Advanced” section. Sites periodically change their protection, and an update catches up with it.",
         "Скопируй ссылку и нажми «Скачать»": "Copy the link and hit “Download”",
-        "Нативное приложение для Mac — скачивает видео и аудио с YouTube, VK, Instagram, TikTok, Vimeo и ещё ~1750 сайтов одним кликом. Сохраняет видео в .mp4 (H.264) — открывается на любом устройстве. Звук можно скачать отдельно.":
-            "A native Mac app — downloads video and audio from YouTube, VK, Instagram, TikTok, Vimeo, and ~1750 other sites in one click. Saves video as .mp4 (H.264) — opens on any device. Audio can be downloaded separately.",
+        "Нативное приложение для Mac — скачивает видео и аудио с YouTube, VK, Instagram, TikTok, Vimeo и ещё ~1750 сайтов одним кликом. Видео — в MP4, MOV, WebM или MKV, звук — в MP3, WAV или M4A: формат выбирается рядом с кнопками скачивания.":
+            "A native Mac app — downloads video and audio from YouTube, VK, Instagram, TikTok, Vimeo, and ~1750 other sites in one click. Video as MP4, MOV, WebM or MKV, audio as MP3, WAV or M4A: pick the format next to the download buttons.",
         "Что умеет": "What it can do",
         "Показывает размер файла и доступное качество до скачивания.":
             "Shows the file size and available quality before you download.",
         "Сама подставляет ссылку из буфера обмена и предупреждает, если это не ссылка.":
             "Auto-fills the link from your clipboard, and warns if it's not actually a link.",
-        "Если что-то пошло не так — отчёт об ошибке отправляется разработчику в один клик.":
-            "If something goes wrong, an error report goes to the developer with one click.",
+        "Если что-то пошло не так — отчёт об ошибке отправляется разработчику.": "If something goes wrong, an error report is sent to the developer.",
         "Работает на русском и английском.": "Works in Russian and English.",
-        "Внутренние инструменты скачивания обновляются на месте, без переустановки всей программы.":
-            "The internal download tools update in place, without reinstalling the whole app.",
+        "Хранит историю последних скачиваний.": "Keeps a history of your recent downloads.",
+        "Ставит скачивание на паузу и докачивает его, даже если пропал интернет или программу закрыли.": "Pauses and resumes downloads, even after the internet drops or the app is closed.",
+        "Скорость скачивания можно ограничить в «Дополнительно».": "Download speed can be limited in “Advanced”.",
+        "Обновляется одной кнопкой.": "Updates with one button.",
         "Работает на любом Mac (Intel и Apple Silicon), macOS 13 и новее.":
             "Works on any Mac (Intel and Apple Silicon), macOS 13 and newer.",
         "Что не умеет": "What it can't do",
@@ -272,10 +298,10 @@ enum Translations {
         "Это не юридическая консультация, а общие ориентиры. Законы отличаются в разных странах, поэтому перед использованием программы проверьте, что допускает закон в вашей стране. Если сомневаетесь — консультируйтесь с юристом.":
             "This isn't legal advice, just general guidance. Laws differ between countries, so check what's allowed where you live before using the app. Consult a lawyer if you're unsure.",
         "Сама программа легальна.": "The app itself is legal.",
-        "Внутри — открытый движок yt-dlp, VideoDownloader просто удобная оболочка над ним. Она не взламывает сайты: берёт те же потоки, что сайт и так отдаёт браузеру.":
-            "Under the hood is the open-source yt-dlp engine — VideoDownloader is just a convenient shell around it. It doesn't hack sites: it fetches the same streams a site already serves to a browser.",
-        "VideoDownloader позволяет сохранять видео и аудио локально. Убедитесь, что ваше использование соответствует законодательству вашей страны и условиям сервиса, с которого вы скачиваете контент.":
-            "VideoDownloader lets you save video and audio locally. Make sure your use complies with the law in your country and the terms of the service you're downloading from.",
+        "Внутри — открытый движок yt-dlp, Scorpena – video downloader просто удобная оболочка над ним. Она не взламывает сайты: берёт те же потоки, что сайт и так отдаёт браузеру.":
+            "Under the hood is the open-source yt-dlp engine — Scorpena – video downloader is just a convenient shell around it. It doesn't hack sites: it fetches the same streams a site already serves to a browser.",
+        "Scorpena – video downloader позволяет сохранять видео и аудио локально. Убедитесь, что ваше использование соответствует законодательству вашей страны и условиям сервиса, с которого вы скачиваете контент.":
+            "Scorpena – video downloader lets you save video and audio locally. Make sure your use complies with the law in your country and the terms of the service you're downloading from.",
         "Нельзя:": "Not allowed:",
         "обходить платную подписку и DRM (Netflix, Кинопоиск и т.д.) — программа этого и не умеет.":
             "bypassing a paid subscription or DRM (Netflix, Kinopoisk, etc.) — the app can't do this anyway.",
@@ -290,7 +316,8 @@ enum Translations {
             "The app is distributed free of charge, as-is, without any warranty. By downloading anything through it, you act at your own risk and take full responsibility.",
         "Понятно": "Got it",
         "Отчёты о сбоях.": "Crash reports.",
-        "При серьёзных сбоях программа может отправить разработчику короткий анонимный отчёт: версии программы и macOS и тип ошибки. Ссылки и личные данные не отправляются. Отключить можно в «Дополнительно».": "After a serious failure the app may send the developer a short anonymous report: the app and macOS versions and the type of error. Links and personal data are not sent. You can turn this off in “Advanced”.",
+        "При серьёзных сбоях программа может отправить разработчику короткий анонимный отчёт без ссылок и личных данных. Отключить можно в «Дополнительно».":
+            "In case of a serious failure the app may send the developer a short anonymous report with no links or personal data. You can turn this off in “Advanced”.",
 
         // MARK: DownloadManager — probe status
         "Проверяю доступные качества… %d с": "Checking available qualities… %d s",
@@ -332,8 +359,8 @@ enum Translations {
         "Нужен доступ к диску": "Disk access required",
         "Нужен вход в аккаунт": "Login required",
         "Ошибка": "Error",
-        "Это видео требует входа в аккаунт. Чтобы взять cookies из браузера, приложению нужен доступ к диску. Нажмите «Открыть настройки» — в списке приложений найдите VideoDownloader и включите «Полный доступ к диску» (если его там нет — нажмите «Показать приложение», это откроет его в Finder, перетащите оттуда). Перезапустите приложение и повторите.":
-            "This video requires being logged in. To grab cookies from your browser, the app needs disk access. Click “Open Settings” — find VideoDownloader in the list of apps and turn on “Full Disk Access” (if it's not listed — click “Show the app”, which opens it in Finder, then drag it in from there). Restart the app and try again.",
+        "Это видео требует входа в аккаунт. Чтобы взять cookies из браузера, приложению нужен доступ к диску. Нажмите «Открыть настройки» — в списке приложений найдите Scorpena и включите «Полный доступ к диску» (если его там нет — нажмите «Показать приложение», это откроет его в Finder, перетащите оттуда). Перезапустите приложение и повторите.":
+            "This video requires being logged in. To grab cookies from your browser, the app needs disk access. Click “Open Settings” — find Scorpena in the list of apps and turn on “Full Disk Access” (if it's not listed — click “Show the app”, which opens it in Finder, then drag it in from there). Restart the app and try again.",
         "Для скачивания требуется вход в аккаунт:\n\nСайт отдаёт это видео только при входе в аккаунт. Войдите на сайт в браузере и повторите. Например, Vimeo сейчас требует вход почти для всех роликов, даже открытых.":
             "Logging in is required to download this:\n\nThe site only serves this video to logged-in accounts. Log in to the site in your browser and try again. For example, Vimeo now requires login for almost all videos, even public ones.",
         "Что-то пошло не так. Попробуйте ещё раз или сообщите об ошибке. А пока попробуйте другую ссылку.":

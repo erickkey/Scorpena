@@ -91,7 +91,7 @@ enum DiagnosticReporter {
         let deno = ToolLocator.bundledBinDirectory.map {
             FileManager.default.isExecutableFile(atPath: $0 + "/deno") ? "есть" : "нет"
         } ?? "нет"
-        return "VideoDownloader \(app) · macOS \(os.majorVersion).\(os.minorVersion).\(os.patchVersion) · \(arch)\n"
+        return "Scorpena \(app) · macOS \(os.majorVersion).\(os.minorVersion).\(os.patchVersion) · \(arch)\n"
             + "yt-dlp \(ytDlp) · deno \(deno) · установка #\(installID)"
     }
 
