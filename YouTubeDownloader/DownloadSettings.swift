@@ -47,22 +47,10 @@ enum AudioFormat: String, CaseIterable, Identifiable {
         }
     }
 
-    /// "Готово ✅ (MP3 320 kbps)"
-    var resultName: String {
-        switch self {
-        case .mp3: return "MP3 320 kbps"
-        case .wav: return "WAV"
-        case .m4a: return "M4A (AAC)"
-        }
-    }
+    /// "Готово ✅ (MP3)" — just the format, no extras.
+    var resultName: String { title }
 
-    var convertingStatus: String {
-        switch self {
-        case .mp3: return tr("Конвертация в MP3 320 kbps…")
-        case .wav: return tr("Конвертация в WAV…")
-        case .m4a: return tr("Конвертация в M4A…")
-        }
-    }
+    var convertingStatus: String { trf("Конвертация в %@…", title) }
 
     var fileExtensions: Set<String> {
         switch self {

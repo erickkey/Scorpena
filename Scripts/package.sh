@@ -102,7 +102,7 @@ tell application "Finder"
         set the bounds of container window to {200, 120, 840, 548}
         set opts to the icon view options of container window
         set arrangement of opts to not arranged
-        set icon size of opts to 104
+        set icon size of opts to 96
         set text size of opts to 12
         try
             set label position of opts to bottom
@@ -117,7 +117,7 @@ tell application "Finder"
         set position of item "$NAME.app" of container window to {150, 185}
         set position of item "Applications" of container window to {490, 185}
         try
-            set position of item "Если не открывается.rtf" of container window to {545, 330}
+            set position of item "Если не открывается.rtf" of container window to {545, 312}
         end try
         update without registering applications
         delay 1
