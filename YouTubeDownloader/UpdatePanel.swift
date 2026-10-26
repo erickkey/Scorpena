@@ -139,20 +139,27 @@ private struct UpdatePanelView: View {
         switch panel.phase {
         case .confirm:
             Button(tr("Позже")) { panel.close() }
+                .buttonStyle(SoftPillStyle())
             Button(tr("Обновить")) { panel.confirm() }
+                .buttonStyle(PrimaryPillStyle())
                 .keyboardShortcut(.defaultAction)
         case .downloadRunning:
             Button(tr("Понятно")) { panel.close() }
+                .buttonStyle(PrimaryPillStyle())
                 .keyboardShortcut(.defaultAction)
         case .finished:
             Button(tr("Отлично")) { panel.close() }
+                .buttonStyle(PrimaryPillStyle())
                 .keyboardShortcut(.defaultAction)
         case .rolledBack, .failed:
             Button(tr("Закрыть")) { panel.close() }
+                .buttonStyle(SoftPillStyle())
             Button(tr("Скачать вручную")) { panel.openDownloadPage() }
+                .buttonStyle(PrimaryPillStyle())
                 .keyboardShortcut(.defaultAction)
         case .renamed:
             Button(tr("Ладно")) { panel.confirm() }
+                .buttonStyle(PrimaryPillStyle())
                 .keyboardShortcut(.defaultAction)
         case .downloading, .verifying, .installing, .renaming:
             EmptyView()

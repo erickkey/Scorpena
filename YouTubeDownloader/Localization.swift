@@ -128,20 +128,19 @@ enum Translations {
             "The site serves the video as many small pieces instead of one file, so they have to be downloaded one by one — slower than usual. Vimeo is almost always like this.",
         "Сообщить об ошибке": "Report a problem",
         "Отправлено (обращение №%@) — спасибо!": "Sent (ticket #%@) — thanks!",
-        "Не удалось отправить — текст скопирован, отправьте вручную в Telegram": "Couldn't send it — the text was copied, send it manually via Telegram",
+        "Не удалось отправить — текст скопирован, отправь вручную в Telegram": "Couldn't send it — the text was copied, send it manually via Telegram",
 
         // MARK: Banners
         "Нужен «Полный доступ к диску»": "“Full Disk Access” needed",
-        "Чтобы взять cookies из Safari для видео, требующих входа, добавьте это приложение в список. Один раз.":
-            "To grab cookies from Safari for videos that require a login, add this app to the list. Just once.",
+        "Чтобы взять cookies из Safari для видео, требующих входа, добавь это приложение в список. Один раз. Нет в списке? В настройках нажми «+» и добавь Scorpena из папки, куда ты её установил.":
+            "To grab cookies from Safari for videos that need a login, add this app to the list. Once. Not in the list? In Settings click “+” and add Scorpena from the folder you installed it in.",
         "Открыть настройки": "Open Settings",
-        "Показать приложение": "Show the app",
         "Не хватает инструментов": "Missing tools",
         "yt-dlp: %@\nffmpeg: %@": "yt-dlp: %@\nffmpeg: %@",
         "не найден": "not found",
         "Установить через Homebrew": "Install via Homebrew",
         "Проверить снова": "Check again",
-        "Homebrew не найден — поставьте его с brew.sh. Обычно инструменты уже вшиты в приложение при сборке.":
+        "Homebrew не найден — поставь его с brew.sh. Обычно инструменты уже вшиты в приложение при сборке.":
             "Homebrew not found — install it from brew.sh. The tools are usually already bundled with the app.",
 
         // MARK: Advanced settings window
@@ -217,7 +216,6 @@ enum Translations {
             "“Feedback” — a dedicated section: write a question, a suggestion, or anything else, optionally leaving your name and contact.",
         "Можно запомнить нужный размер окна — при выходе программа спросит, сохранить ли его.":
             "You can save your preferred window size — the app asks whether to remember it when you quit.",
-        "Scorpena – теперь это новое название. Добавь заново значок в Dock и погнали качать": "Scorpena is the new name. Add the Dock icon again and let's get downloading",
         "Программа переименована": "The app has been renamed",
         "Переименовываю…": "Renaming…",
         "Секунду, сейчас программа перезапустится.": "One moment — the app is about to restart.",
@@ -228,6 +226,13 @@ enum Translations {
         "Распаковываю новую версию рядом со старой…": "Unpacking the new version next to the old one…",
         "Проверяю, что новая версия работает с YouTube, и только потом заменяю…": "Checking that the new version works with YouTube, and only then replacing…",
         "Без ограничения": "No limit",
+        "Качество:": "Quality:",
+        "Вставь ссылку на видео": "Paste a video link",
+        "Скачать": "Download",
+        "без звука": "no audio",
+        "Качество (доступное для этого видео):": "Quality (available for this video):",
+        "Выбрать папку для сохранения": "Choose where to save",
+        "Папка:": "Folder:",
         "Если надо замедлиться. Скорость указана и в мегабитах — как в тарифе провайдера, и в мегабайтах": "If you need to slow it down. The speed is shown both in megabits — like on your internet plan — and in megabytes",
         "%d Мбит/с": "%d Mbit/s",
         "≈ %@ МБ/с": "≈ %@ MB/s",
@@ -245,6 +250,14 @@ enum Translations {
         "Не докачано: %@. Продолжить с того места, где остановилось?": "Not finished: %@. Continue from where it stopped?",
         "Не нужно": "No thanks",
         "Готово ✅ (%@)": "Done ✅ (%@)",
+        "Встречайте! Теперь у программы есть название!": "Meet the new name! The app finally has one!",
+        "Новый облик, новые возможности, и всё работает лучше, чем раньше.": "A new look, new features, and everything works better than before.",
+        "Теперь доступен выбор формата видео и звука.": "You can now choose the video and audio format.",
+        "Появилась возможность паузы и докачки видео даже после закрытия программы.": "You can now pause and resume downloads, even after closing the app.",
+        "Ограничение скорости скачивания. (нажми на шестеренку справа вверху)": "Download speed limit. (click the gear at the top right)",
+        "Скачивание и проверка качества стали гораздо быстрее.": "Downloading and the quality check are now much faster.",
+        "Множество мелких улучшений и исправлений.": "Lots of small improvements and fixes.",
+        "Добавь приложение в Dock и погнали качать!": "Add the app to the Dock and let's get downloading!",
         "Обновление программы теперь одной кнопкой (наконец-то).": "Updating the app is now one button (finally).",
         "Встроенный загрузчик обновляется сам.": "The built-in downloader updates itself.",
         "История скачиваний.": "Download history.",
@@ -255,7 +268,7 @@ enum Translations {
         "Мелкие внутренние улучшения и исправления.": "Minor internal improvements and fixes.",
 
         // MARK: About window
-        "Если видео перестало скачиваться — нажмите «Проверить сейчас» в разделе «Дополнительно». Сайты периодически меняют защиту, обновление её догоняет.":
+        "Если видео перестало скачиваться — нажми «Проверить сейчас» в разделе «Дополнительно». Сайты периодически меняют защиту, обновление её догоняет.":
             "If videos stop downloading, click “Check now” in the “Advanced” section. Sites periodically change their protection, and an update catches up with it.",
         "Скопируй ссылку и нажми «Скачать»": "Copy the link and hit “Download”",
         "Нативное приложение для Mac — скачивает видео и аудио с YouTube, VK, Instagram, TikTok, Vimeo и ещё ~1750 сайтов одним кликом. Видео — в MP4, MOV, WebM или MKV, звук — в MP3, WAV или M4A: формат выбирается рядом с кнопками скачивания.":
@@ -285,34 +298,34 @@ enum Translations {
         "Вопросы, предложения, ошибки — что угодно. Уходит прямо разработчику.":
             "Questions, suggestions, bugs — anything at all. Goes straight to the developer.",
         "Обращение": "Message",
-        "Напишите сюда…": "Write here…",
+        "Напиши сюда…": "Write here…",
         "Имя (необязательно)": "Name (optional)",
-        "Как вас зовут": "Your name",
+        "Как тебя зовут": "Your name",
         "Как связаться (необязательно)": "How to reach you (optional)",
         "Например, ссылка на Telegram": "e.g. a Telegram link",
         "Обращение отправлено": "Message sent",
         "Отправить": "Send",
-        "Подождите ещё %d с перед следующим сообщением.": "Please wait %d more seconds before sending another message.",
+        "Подожди ещё %d с перед следующим сообщением.": "Please wait %d more seconds before sending another message.",
 
         // MARK: Legal window
-        "Это не юридическая консультация, а общие ориентиры. Законы отличаются в разных странах, поэтому перед использованием программы проверьте, что допускает закон в вашей стране. Если сомневаетесь — консультируйтесь с юристом.":
+        "Это не юридическая консультация, а общие ориентиры. Законы отличаются в разных странах, поэтому перед использованием программы проверь, что допускает закон в твоей стране. Если сомневаешься — консультируйся с юристом.":
             "This isn't legal advice, just general guidance. Laws differ between countries, so check what's allowed where you live before using the app. Consult a lawyer if you're unsure.",
         "Сама программа легальна.": "The app itself is legal.",
         "Внутри — открытый движок yt-dlp, Scorpena – video downloader просто удобная оболочка над ним. Она не взламывает сайты: берёт те же потоки, что сайт и так отдаёт браузеру.":
             "Under the hood is the open-source yt-dlp engine — Scorpena – video downloader is just a convenient shell around it. It doesn't hack sites: it fetches the same streams a site already serves to a browser.",
-        "Scorpena – video downloader позволяет сохранять видео и аудио локально. Убедитесь, что ваше использование соответствует законодательству вашей страны и условиям сервиса, с которого вы скачиваете контент.":
+        "Scorpena – video downloader позволяет сохранять видео и аудио локально. Убедись, что твоё использование соответствует законодательству твоей страны и условиям сервиса, с которого ты скачиваешь контент.":
             "Scorpena – video downloader lets you save video and audio locally. Make sure your use complies with the law in your country and the terms of the service you're downloading from.",
         "Нельзя:": "Not allowed:",
         "обходить платную подписку и DRM (Netflix, Кинопоиск и т.д.) — программа этого и не умеет.":
             "bypassing a paid subscription or DRM (Netflix, Kinopoisk, etc.) — the app can't do this anyway.",
         "Ответственность": "Responsibility",
-        "Автор не отвечает за то, какие видео и с каких сайтов вы скачиваете, и за соблюдение вами законов, авторских прав и правил этих сайтов.":
+        "Автор не отвечает за то, какие видео и с каких сайтов ты скачиваешь, и за соблюдение тобой законов, авторских прав и правил этих сайтов.":
             "The author isn't responsible for what videos or sites you download from, or for your compliance with laws, copyright, or those sites' rules.",
-        "Автор не отвечает за любой вред: потерю или повреждение файлов, сбои в работе, блокировку ваших аккаунтов, претензии правообладателей или сайтов.":
+        "Автор не отвечает за любой вред: потерю или повреждение файлов, сбои в работе, блокировку твоих аккаунтов, претензии правообладателей или сайтов.":
             "The author isn't responsible for any harm: lost or corrupted files, malfunctions, your accounts being blocked, or claims from rights holders or sites.",
         "Автор не гарантирует, что программа работает, работает правильно или продолжит работать в будущем.":
             "The author doesn't guarantee the app works, works correctly, or will keep working in the future.",
-        "Программа распространяется бесплатно, в текущем виде, без каких-либо гарантий. Скачивая что-либо через программу, вы действуете на свой страх и риск и полностью принимаете ответственность на себя.":
+        "Программа распространяется бесплатно, в текущем виде, без каких-либо гарантий. Скачивая что-либо через программу, ты действуешь на свой страх и риск и полностью принимаешь ответственность на себя.":
             "The app is distributed free of charge, as-is, without any warranty. By downloading anything through it, you act at your own risk and take full responsibility.",
         "Понятно": "Got it",
         "Отчёты о сбоях.": "Crash reports.",
@@ -333,13 +346,13 @@ enum Translations {
         "Обновление встроенного yt-dlp…": "Updating the built-in yt-dlp…",
         "yt-dlp и ffmpeg обновлены ✅": "yt-dlp and ffmpeg updated ✅",
         "Обновление yt-dlp и ffmpeg…": "Updating yt-dlp and ffmpeg…",
-        "Homebrew не найден. Установите его одной командой в Терминале:\n\n/bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"\n\nзатем нажмите «Проверить снова».":
+        "Homebrew не найден. Установи его одной командой в Терминале:\n\n/bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"\n\nзатем нажми «Проверить снова».":
             "Homebrew not found. Install it with one command in Terminal:\n\n/bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"\n\nthen click “Check again”.",
 
         // MARK: DownloadManager — download flow
-        "Вставьте ссылку на видео.": "Paste a video link.",
-        "yt-dlp не найден. Нажмите «Установить через Homebrew» в баннере выше.": "yt-dlp not found. Click “Install via Homebrew” in the banner above.",
-        "ffmpeg не найден. Нажмите «Установить через Homebrew» в баннере выше.": "ffmpeg not found. Click “Install via Homebrew” in the banner above.",
+        "Вставь ссылку на видео.": "Paste a video link.",
+        "yt-dlp не найден. Нажми «Установить через Homebrew» в баннере выше.": "yt-dlp not found. Click “Install via Homebrew” in the banner above.",
+        "ffmpeg не найден. Нажми «Установить через Homebrew» в баннере выше.": "ffmpeg not found. Click “Install via Homebrew” in the banner above.",
         "Скачивание сейчас начнётся…": "Download will start now…",
         "Нужен вход — пробую %@…": "Login required — trying %@…",
         "без входа": "without login",
@@ -359,11 +372,11 @@ enum Translations {
         "Нужен доступ к диску": "Disk access required",
         "Нужен вход в аккаунт": "Login required",
         "Ошибка": "Error",
-        "Это видео требует входа в аккаунт. Чтобы взять cookies из браузера, приложению нужен доступ к диску. Нажмите «Открыть настройки» — в списке приложений найдите Scorpena и включите «Полный доступ к диску» (если его там нет — нажмите «Показать приложение», это откроет его в Finder, перетащите оттуда). Перезапустите приложение и повторите.":
-            "This video requires being logged in. To grab cookies from your browser, the app needs disk access. Click “Open Settings” — find Scorpena in the list of apps and turn on “Full Disk Access” (if it's not listed — click “Show the app”, which opens it in Finder, then drag it in from there). Restart the app and try again.",
-        "Для скачивания требуется вход в аккаунт:\n\nСайт отдаёт это видео только при входе в аккаунт. Войдите на сайт в браузере и повторите. Например, Vimeo сейчас требует вход почти для всех роликов, даже открытых.":
+        "Это видео требует входа в аккаунт. Чтобы взять cookies из браузера, приложению нужен доступ к диску. Нажми «Открыть настройки» — в списке приложений найди Scorpena и включи «Полный доступ к диску» (если его там нет — добавь кнопкой «+»). Перезапусти приложение и повтори.":
+            "This video requires being logged in. To grab cookies from your browser, the app needs disk access. Click “Open Settings” — find Scorpena in the list of apps and turn on “Full Disk Access” (if it's not listed — add it with the “+” button). Restart the app and try again.",
+        "Для скачивания требуется вход в аккаунт:\n\nСайт отдаёт это видео только при входе в аккаунт. Войди на сайт в браузере и повтори. Например, Vimeo сейчас требует вход почти для всех роликов, даже открытых.":
             "Logging in is required to download this:\n\nThe site only serves this video to logged-in accounts. Log in to the site in your browser and try again. For example, Vimeo now requires login for almost all videos, even public ones.",
-        "Что-то пошло не так. Попробуйте ещё раз или сообщите об ошибке. А пока попробуйте другую ссылку.":
+        "Что-то пошло не так. Попробуй ещё раз или сообщи об ошибке. А пока попробуй другую ссылку.":
             "Something went wrong. Try again or report the problem. In the meantime, try a different link.",
         "%d с": "%d s",
         "%d мин %d с": "%d min %d s",
@@ -378,13 +391,13 @@ enum Translations {
         "Видео скачано (%@), но перекодировать в H.264 не удалось. Файл остался в исходном кодеке.":
             "Video downloaded (%@), but transcoding to H.264 failed. The file was kept in its original codec.",
         "Скачано, но не в H.264": "Downloaded, but not H.264",
-        "Видео недоступно (удалено, приватное или заблокировано в вашем регионе).":
+        "Видео недоступно (удалено, приватное или заблокировано в твоём регионе).":
             "Video unavailable (removed, private, or blocked in your region).",
         "Ссылка не распознана или сайт не поддерживается. Нужен прямой адрес страницы видео (YouTube, VK и т.д.).":
             "Link not recognized or the site isn't supported. A direct video page URL is needed (YouTube, VK, etc.).",
-        "Не нашёлся формат под выбранное качество — попробуйте «Максимальное».":
+        "Не нашёлся формат под выбранное качество — попробуй «Максимальное».":
             "No format found for the selected quality — try “Best”.",
-        "YouTube отклонил загрузку (403). Откройте «Дополнительно» → «Проверить сейчас», затем повторите. Или попробуйте другую ссылку.":
+        "YouTube отклонил загрузку (403). Открой «Дополнительно» → «Проверить сейчас», затем повтори. Или попробуй другую ссылку.":
             "YouTube rejected the download (403). Open “Advanced” → “Check now”, then try again. Or try a different link.",
         "Нет соединения с интернетом.": "No internet connection.",
 

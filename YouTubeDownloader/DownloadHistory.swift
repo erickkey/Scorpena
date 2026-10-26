@@ -208,7 +208,8 @@ struct HistoryView: View {
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
-                Group {
+                VStack(alignment: .leading, spacing: 14) {
+                    WindowTitleRow(title: tr("История скачиваний"))
                     if history.items.isEmpty {
                         Text(tr("Пока нет скачиваний"))
                             .foregroundStyle(.secondary)
@@ -220,21 +221,21 @@ struct HistoryView: View {
                         }
                     }
                 }
-                .padding(20)
+                .padding(EdgeInsets(top: 22, leading: 24, bottom: 8, trailing: 24))
+                .background(AlwaysVisibleScroller())
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Divider()
             HStack {
                 Button(tr("Очистить историю")) { confirmingClear = true }
-                    .buttonStyle(.link)
+                    .buttonStyle(.plain)
                     .foregroundStyle(history.items.isEmpty ? Color.secondary : Color.red)
                     .disabled(history.items.isEmpty)
                 Spacer()
                 Button(tr("Закрыть")) { onClose() }
+                    .buttonStyle(PrimaryPillStyle())
                     .keyboardShortcut(.defaultAction)
-                    .controlSize(.large)
             }
-            .padding(14)
+            .padding(EdgeInsets(top: 12, leading: 24, bottom: 16, trailing: 24))
         }
         .frame(width: 540, height: 580)
         .alert(tr("Очистить историю?"), isPresented: $confirmingClear) {
@@ -270,10 +271,11 @@ struct HistoryView: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(8)
+            .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.12)))
-            .contentShape(RoundedRectangle(cornerRadius: 8))
+            .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .textBackgroundColor)))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color(nsColor: .separatorColor)))
+            .contentShape(RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
     }

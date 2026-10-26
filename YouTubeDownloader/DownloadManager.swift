@@ -557,11 +557,11 @@ final class DownloadManager: ObservableObject {
         guard !isRunning else { return }
         guard let brew = brewPath else {
             phase = .failed(tr("""
-            Homebrew не найден. Установите его одной командой в Терминале:
+            Homebrew не найден. Установи его одной командой в Терминале:
 
             /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-            затем нажмите «Проверить снова».
+            затем нажми «Проверить снова».
             """))
             return
         }
@@ -603,15 +603,15 @@ final class DownloadManager: ObservableObject {
 
         let url = Self.normalizedURLString(urlString)
         guard !url.isEmpty else {
-            phase = .failed(tr("Вставьте ссылку на видео."))
+            phase = .failed(tr("Вставь ссылку на видео."))
             return
         }
         guard ytDlpPath != nil else {
-            phase = .failed(tr("yt-dlp не найден. Нажмите «Установить через Homebrew» в баннере выше."))
+            phase = .failed(tr("yt-dlp не найден. Нажми «Установить через Homebrew» в баннере выше."))
             return
         }
         guard ffmpegPath != nil else {
-            phase = .failed(tr("ffmpeg не найден. Нажмите «Установить через Homebrew» в баннере выше."))
+            phase = .failed(tr("ffmpeg не найден. Нажми «Установить через Homebrew» в баннере выше."))
             return
         }
 
@@ -1093,7 +1093,7 @@ final class DownloadManager: ObservableObject {
             DiagnosticReporter.noteDownloadFailure(
                 category: "неизвестная ошибка", host: URL(string: pendingURL)?.host, log: log)
         }
-        phase = .failed(tr("Что-то пошло не так. Попробуйте ещё раз или сообщите об ошибке. А пока попробуйте другую ссылку."))
+        phase = .failed(tr("Что-то пошло не так. Попробуй ещё раз или сообщи об ошибке. А пока попробуй другую ссылку."))
         statusLine = tr("Ошибка")
     }
 
@@ -1132,16 +1132,15 @@ final class DownloadManager: ObservableObject {
         if fdaBlocked {
             return tr("""
             Это видео требует входа в аккаунт. Чтобы взять cookies из браузера, приложению нужен \
-            доступ к диску. Нажмите «Открыть настройки» — в списке приложений найдите \
-            Scorpena и включите «Полный доступ к диску» (если его там нет — нажмите \
-            «Показать приложение», это откроет его в Finder, перетащите оттуда). Перезапустите \
-            приложение и повторите.
+            доступ к диску. Нажми «Открыть настройки» — в списке приложений найди \
+            Scorpena и включи «Полный доступ к диску» (если его там нет — добавь \
+            кнопкой «+»). Перезапусти приложение и повтори.
             """)
         }
         return tr("""
         Для скачивания требуется вход в аккаунт:
 
-        Сайт отдаёт это видео только при входе в аккаунт. Войдите на сайт в браузере и повторите. \
+        Сайт отдаёт это видео только при входе в аккаунт. Войди на сайт в браузере и повтори. \
         Например, Vimeo сейчас требует вход почти для всех роликов, даже открытых.
         """)
     }
@@ -1362,16 +1361,16 @@ final class DownloadManager: ObservableObject {
         let l = log.lowercased()
 
         if l.contains("video unavailable") || l.contains("this video is not available") {
-            return tr("Видео недоступно (удалено, приватное или заблокировано в вашем регионе).")
+            return tr("Видео недоступно (удалено, приватное или заблокировано в твоём регионе).")
         }
         if l.contains("is not a valid url") || l.contains("unsupported url") {
             return tr("Ссылка не распознана или сайт не поддерживается. Нужен прямой адрес страницы видео (YouTube, VK и т.д.).")
         }
         if l.contains("requested format is not available") {
-            return tr("Не нашёлся формат под выбранное качество — попробуйте «Максимальное».")
+            return tr("Не нашёлся формат под выбранное качество — попробуй «Максимальное».")
         }
         if l.contains("unable to download") && (l.contains("http error 403") || l.contains("403 forbidden")) {
-            return tr("YouTube отклонил загрузку (403). Откройте «Дополнительно» → «Проверить сейчас», затем повторите. Или попробуйте другую ссылку.")
+            return tr("YouTube отклонил загрузку (403). Открой «Дополнительно» → «Проверить сейчас», затем повтори. Или попробуй другую ссылку.")
         }
         if l.contains("unable to resolve host") || l.contains("network is unreachable") || l.contains("connection refused") {
             return tr("Нет соединения с интернетом.")

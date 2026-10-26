@@ -7,7 +7,7 @@ struct YouTubeDownloaderApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .frame(minWidth: 560, idealWidth: 790, minHeight: 380, idealHeight: 590)
+                .frame(minWidth: 560, idealWidth: 640, minHeight: 280, idealHeight: 590)
         }
         .windowResizability(.contentMinSize)
     }

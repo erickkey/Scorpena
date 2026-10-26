@@ -20,6 +20,7 @@ struct ContentView: View {
     @AppStorage("videoNoAudio") private var videoNoAudio = false
     @AppStorage(VideoFormat.key) private var videoFormat = VideoFormat.mp4.rawValue
     @AppStorage(AudioFormat.key) private var audioFormat = AudioFormat.mp3.rawValue
+    @AppStorage("downloadMode") private var downloadMode = "video"      // video | audio — what «Скачать» saves
     @AppStorage("lastSeenChangelogVersion") private var lastSeenChangelogVersion = ""
     @AppStorage("appearance") private var appearance = "auto"   // auto | light | dark
     @ObservedObject private var languageSettings = LanguageSettings.shared   // unused directly — just
@@ -156,11 +157,34 @@ struct ContentView: View {
     var body: some View {
         ScrollView {
             mainContent(spacing: 16)
+                .background(AlwaysVisibleScroller())
                 .background(GeometryReader { proxy in
                     Color.clear.preference(key: ContentHeightKey.self, value: proxy.size.height)
                 })
         }
         .onPreferenceChange(ContentHeightKey.self) { windowFitter.fit(toContent: $0) }
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button {
+                    HistoryPanel.shared.show { picked in urlString = picked }
+                } label: {
+                    Image(systemName: "clock.arrow.circlepath")
+                }
+                .help(tr("История скачиваний"))
+                Button {
+                    AdvancedSettingsPanel.shared.show(manager: manager)
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+                .help(tr("Дополнительно"))
+                Button {
+                    appearance = (appearance == "dark") ? "light" : "dark"
+                } label: {
+                    Image(systemName: appearance == "dark" ? "sun.max" : "moon")
+                }
+                .help(tr("Светлая / тёмная тема"))
+            }
+        }
         .background(WindowAccessor { windowFitter.window = $0 })
         .frame(minWidth: 560, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .overlay(alignment: .bottomTrailing) { ResizeGripView() }
@@ -186,7 +210,6 @@ struct ContentView: View {
             }
         }
         .onChange(of: appearance) { _ in applyAppearance() }
-        .onChange(of: languageSettings.language) { _ in fitWidthToIntro() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             fillURLFromClipboard()
             updateChecker.check()
@@ -199,20 +222,21 @@ struct ContentView: View {
     }
 
     private func mainContent(spacing: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: spacing) {
-            header
-            urlField
-            qualityCheckSection
-            destinationRow
-            actionRow
+        VStack(spacing: 18) {
+            brandRow
+            VStack(spacing: 14) {
+                urlField
+                formatRow
+                settingsLine
+            }
+            .frame(maxWidth: 560)
             progressSection
+                .frame(maxWidth: 560)
             if manager.needsFullDiskAccess { fullDiskAccessBanner }
             if !manager.toolsReady { missingToolsBanner }
             footer
         }
-        // The icon's thin transparent edge makes the top look ~4 pt roomier than
-        // the 20 pt it is, so the bottom gets a little extra to match.
-        .padding(EdgeInsets(top: 20, leading: 20, bottom: 24, trailing: 20))
+        .padding(EdgeInsets(top: 22, leading: 28, bottom: 20, trailing: 28))
         .frame(maxWidth: .infinity, alignment: .top)
     }
 
@@ -268,7 +292,7 @@ struct ContentView: View {
     /// The user's preferred window shape. Resizing afterwards is completely
     /// free (no locked aspect ratio) — this only picks the size the window
     /// opens at.
-    private static var preferredWindowSize: NSSize { NSSize(width: introWidth + 42, height: 590) }
+    private static let preferredWindowSize = NSSize(width: 640, height: 470)
 
     /// Sizes the window once at launch to `preferredWindowSize`, scaled down
     /// to fit a smaller screen if needed. The aspect ratio always wins over
@@ -304,18 +328,6 @@ struct ContentView: View {
         window.centerExactlyOnScreen()
         windowFitter.window = window
         windowFitter.setBase(contentHeight: window.contentLayoutRect.height)
-    }
-
-    /// The description is a different length in each language, so the window
-    /// follows it when the language is switched.
-    private func fitWidthToIntro() {
-        guard let window = windowFitter.window else { return }
-        var width = Self.introWidth + 42
-        if let visible = (window.screen ?? NSScreen.main)?.visibleFrame { width = min(width, visible.width - 40) }
-        guard abs(window.contentLayoutRect.width - width) > 1 else { return }
-        var frame = window.frame
-        frame.size.width = width + (frame.width - window.contentLayoutRect.width)
-        window.setFrame(frame, display: true, animate: true)
     }
 
     /// Draws a thin progress bar over the app's Dock icon while a download runs.
@@ -421,9 +433,25 @@ struct ContentView: View {
 
     /// Shown once, the first time a given version launches. Add a new entry
     /// with every release that has user-visible changes.
+    /// A festive heading (and a line under it) shown above the list for versions that have one.
+    static let changelogHeadlines: [String: (intro: String, name: String, subtitle: String)] = [
+        "3.0": ("Встречайте! Теперь у программы есть название!",
+                "Scorpena – video downloader",
+                "Новый облик, новые возможности, и всё работает лучше, чем раньше."),
+    ]
+
+    /// A call to action shown under the list, highlighted so it isn't missed.
+    static let changelogCallouts: [String: String] = [
+        "3.0": "Добавь приложение в Dock и погнали качать!",
+    ]
+
     static let changelog: [String: [String]] = [
         "3.0": [
-            "Scorpena – теперь это новое название. Добавь заново значок в Dock и погнали качать",
+            "Теперь доступен выбор формата видео и звука.",
+            "Появилась возможность паузы и докачки видео даже после закрытия программы.",
+            "Ограничение скорости скачивания. (нажми на шестеренку справа вверху)",
+            "Скачивание и проверка качества стали гораздо быстрее.",
+            "Множество мелких улучшений и исправлений.",
         ],
         "2.1": [
             "Обновление программы теперь одной кнопкой (наконец-то).",
@@ -454,76 +482,37 @@ struct ContentView: View {
 
     // MARK: Sections
 
-    /// The two-line description under the title. The window opens exactly as wide
-    /// as its longer line (plus the side margins), so it never wraps.
-    private static var introText: String {
-        tr("Нативное приложение для Mac, которое скачивает видео и аудио с YouTube, VK, Instagram, TikTok, Vimeo и ещё почти 1750 сайтов одной кнопкой.\nПоказ реального размера файла перед скачиванием, поддержка ссылок в любом виде и умная подстановка из буфера обмена.")
-    }
-
-    private static var introWidth: CGFloat {
-        let font = NSFont.preferredFont(forTextStyle: .caption1)
-        let widest = introText.split(separator: "\n")
-            .map { ($0 as NSString).size(withAttributes: [.font: font]).width }
-            .max() ?? 0
-        return ceil(widest)
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // Logo + name on the left and the two controls on the right share one
-            // line and one height (the icon has a thin transparent margin, so its
-            // visible part is ~51 pt of the 60 pt frame).
-            HStack(alignment: .center, spacing: 10) {
-                Image(nsImage: NSApp.applicationIconImage)
-                    .resizable()
-                    .frame(width: 60, height: 60)
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text("SCORPENA")
-                            .font(.title2.bold())
-                        if let version = Self.appVersionString {
-                            Button {
-                                WhatsNewPanel.shared.show(version: version, closeTitle: tr("Закрыть"), onAcknowledge: {})
-                            } label: {
-                                Text("(v.\(version))")
-                                    .font(.caption2)
-                                    .underline(hoveringVersion)
-                                    .foregroundStyle(hoveringVersion ? Color.accentColor : Color.secondary)
-                            }
-                            .buttonStyle(.plain)
-                            .help(tr("Список изменений"))
-                            .onHover { inside in
-                                hoveringVersion = inside
-                                if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                            }
+    /// Logo and name, centred. The version is a link to the list of changes.
+    private var brandRow: some View {
+        HStack(spacing: 12) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .frame(width: 50, height: 50)
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text("SCORPENA")
+                        .font(.title2.bold())
+                    if let version = Self.appVersionString {
+                        Button {
+                            WhatsNewPanel.shared.show(version: version, closeTitle: tr("Закрыть"), onAcknowledge: {})
+                        } label: {
+                            Text("(v.\(version))")
+                                .font(.caption2)
+                                .underline(hoveringVersion)
+                                .foregroundStyle(hoveringVersion ? Color.accentColor : Color.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help(tr("Список изменений"))
+                        .onHover { inside in
+                            hoveringVersion = inside
+                            if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                         }
                     }
-                    Text("video downloader")
-                        .font(.headline.weight(.regular))
                 }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 0) {
-                    Button {
-                        AdvancedSettingsPanel.shared.show(manager: manager)
-                    } label: {
-                        Label(tr("Дополнительно"), systemImage: "gearshape")
-                    }
-                    Spacer(minLength: 0)
-                    Picker(tr("Оформление"), selection: $appearance) {
-                        Image(systemName: "sun.max.fill").tag("light")
-                        Image(systemName: "moon.fill").tag("dark")
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .frame(width: 80)
-                    .help(tr("Светлая / тёмная тема"))
-                }
-                .frame(height: 51)
+                Text("video downloader")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
-            Text(Self.introText)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -588,25 +577,40 @@ struct ContentView: View {
     }
 
     private var urlField: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 10) {
-                Text(tr("Ссылка на видео"))
-                    .font(.subheadline.weight(.semibold))
+        VStack(spacing: 4) {
+            HStack(spacing: 8) {
+                Image(systemName: "link")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                TextField(tr("Вставь ссылку на видео"), text: $urlString)
+                    .textFieldStyle(.plain)
+                    .font(.title3)
+                    .disableAutocorrection(true)
+                    .onSubmit { if canDownload { startDownload(audioOnly: downloadMode == "audio") } }
+                    .onChange(of: urlString) { _ in manager.resetProbe() }
                 Button {
-                    HistoryPanel.shared.show { picked in urlString = picked }
+                    startDownload(audioOnly: downloadMode == "audio")
                 } label: {
-                    Label(tr("История скачиваний"), systemImage: "clock.arrow.circlepath")
+                    // Dark pill with light text when it can be pressed; a soft grey
+                    // pill with clearly readable grey text when it can't.
+                    Text(tr("Скачать"))
+                        .fontWeight(.medium)
+                        .foregroundColor(canDownload ? Color(nsColor: .windowBackgroundColor) : Color.secondary)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 8)
+                        .background(RoundedRectangle(cornerRadius: 8)
+                            .fill(canDownload ? Color.primary : Color.primary.opacity(0.1)))
                 }
-                .buttonStyle(.link)
-                .font(.caption)
-                Spacer(minLength: 0)
+                .buttonStyle(.plain)
+                .keyboardShortcut(.defaultAction)
+                .disabled(!canDownload)
             }
-            TextField(tr("https://vk.com/video…  или  https://www.youtube.com/watch?v=…"), text: $urlString)
-                .textFieldStyle(.roundedBorder)
-                .font(.title3)
-                .disableAutocorrection(true)
-                .onSubmit { if canDownload { startDownload(audioOnly: false) } }
-                .onChange(of: urlString) { _ in manager.resetProbe() }
+            .padding(.leading, 14)
+            .padding(.trailing, 6)
+            .padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .textBackgroundColor)))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color(nsColor: .separatorColor)))
+
             // Always renders (blank when not applicable) so this row's
             // height is reserved up front — showing/hiding it used to shove
             // everything below it up and down as you typed.
@@ -615,122 +619,106 @@ struct ContentView: View {
             let showHomepageHint = hasText && isPlausibleURL && isBareHomepage
             let showKnownSiteHint = hasText && isPlausibleURL && !isBareHomepage && isKnownSite
             let showUnknownSiteHint = hasText && isPlausibleURL && !isBareHomepage && !isKnownSite
-            Text(showURLWarning ? tr("Кажется, это не ссылка — проверь, что скопировалось")
-                 : showHomepageHint ? tr("Это главная страница сайта, а не ссылка на видео")
-                 : showKnownSiteHint ? tr("Сайт есть в списке поддерживаемых ✅")
-                 : showUnknownSiteHint ? tr("Необычный сайт — программа попробует, но результат не гарантирован")
-                 : " ")
-                .font(.caption)
-                .foregroundStyle(showURLWarning || showHomepageHint ? .red : showKnownSiteHint ? .green : .orange)
-                .opacity(showURLWarning || showHomepageHint || showKnownSiteHint || showUnknownSiteHint ? 1 : 0)
-
-            Text(manager.probedTitle.map { "▸ \($0)" } ?? " ")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .opacity(manager.probedTitle == nil ? 0 : 1)
+            HStack(spacing: 10) {
+                Text(showURLWarning ? tr("Кажется, это не ссылка — проверь, что скопировалось")
+                     : showHomepageHint ? tr("Это главная страница сайта, а не ссылка на видео")
+                     : showKnownSiteHint ? tr("Сайт есть в списке поддерживаемых ✅")
+                     : showUnknownSiteHint ? tr("Необычный сайт — программа попробует, но результат не гарантирован")
+                     : " ")
+                    .foregroundStyle(showURLWarning || showHomepageHint ? .red : showKnownSiteHint ? .green : .orange)
+                    .opacity(showURLWarning || showHomepageHint || showKnownSiteHint || showUnknownSiteHint ? 1 : 0)
+                    .layoutPriority(1)
+                Text(manager.probedTitle.map { "▸ \($0)" } ?? " ")
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .opacity(manager.probedTitle == nil ? 0 : 1)
+                Spacer(minLength: 0)
+            }
+            .font(.caption)
         }
     }
 
-    /// Downloading never requires this — «Скачать видео»/«Скачать звук»
-    /// work straight off the link above. This is only for people who want
-    /// to pick a resolution or see the file size before committing.
-    private var qualityCheckSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(manager.availableHeights.isEmpty ? tr("Качество видео") : tr("Качество видео (доступное для этого видео)"))
-                .font(.subheadline.weight(.semibold))
-            Picker(tr("Качество"), selection: $qualityHeight) {
-                Text(maxOptionMenuLabel).tag(0)
+    /// One choice for the whole download: pick a video container or an audio
+    /// format, and «Скачать» saves exactly that.
+    private var formatRow: some View {
+        let busy = manager.isRunning || manager.isPaused
+        return HStack(spacing: 20) {
+            FormatSegments(title: tr("Видео"),
+                           options: VideoFormat.allCases.map { ($0.rawValue, $0.title) },
+                           selected: videoFormat,
+                           active: downloadMode == "video",
+                           disabled: busy) { picked in
+                videoFormat = picked
+                downloadMode = "video"
+            }
+            FormatSegments(title: tr("Звук"),
+                           options: AudioFormat.allCases.map { ($0.rawValue, $0.title) },
+                           selected: audioFormat,
+                           active: downloadMode == "audio",
+                           disabled: busy) { picked in
+                audioFormat = picked
+                downloadMode = "audio"
+            }
+        }
+    }
+
+    private var folderName: String {
+        let name = URL(fileURLWithPath: destinationPath).lastPathComponent
+        return name.isEmpty ? destinationPath : name
+    }
+
+    private var qualityLabel: String {
+        qualityHeight == 0 ? maxOptionMenuLabel : qualityMenuLabel(qualityHeight)
+    }
+
+    /// Quality · folder · "no audio" in one quiet line. Downloading never
+    /// requires any of it — «Скачать» works straight off the link.
+    private var settingsLine: some View {
+        let busy = manager.isRunning || manager.isPaused
+        return HStack(spacing: 8) {
+            Menu {
+                Button(tr("Проверить качество")) { manager.probeQuality(urlString: urlString) }
+                    .disabled(!isPlausibleURL || manager.isProbing || manager.isRunning)
+                Divider()
+                Button { qualityHeight = 0 } label: {
+                    if qualityHeight == 0 { Label(maxOptionMenuLabel, systemImage: "checkmark") } else { Text(maxOptionMenuLabel) }
+                }
                 ForEach(qualityOptions, id: \.self) { h in
-                    Text(qualityMenuLabel(h)).tag(h)
+                    Button { qualityHeight = h } label: {
+                        if qualityHeight == h { Label(qualityMenuLabel(h), systemImage: "checkmark") } else { Text(qualityMenuLabel(h)) }
+                    }
+                }
+            } label: {
+                if manager.isProbing {
+                    HStack(spacing: 6) { Text(tr("Качество:")).font(.caption); ProgressView().controlSize(.small) }
+                } else {
+                    Text(tr("Качество:") + " " + qualityLabel).font(.caption)
                 }
             }
-            .labelsHidden()
-            .frame(width: 260)
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .disabled(busy)
+            .help(tr("Необязательно — можно сразу нажать «Скачать».\nПроверка займёт немного времени, зато сразу покажет все доступные варианты качества и размер файла."))
             .onChange(of: manager.availableHeights) { heights in
                 if qualityHeight != 0, !heights.contains(qualityHeight) {
                     qualityHeight = 0
                 }
             }
 
-            Button {
-                manager.probeQuality(urlString: urlString)
-            } label: {
-                if manager.isProbing {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Text(tr("Проверить качество"))
-                }
+            Text("·")
+            Button { chooseFolder() } label: {
+                Text(tr("Папка:") + " " + folderName)
             }
-            .disabled(!isPlausibleURL || manager.isProbing || manager.isRunning)
-
-            Text(tr("Необязательно — можно сразу нажать «Скачать видео».\nПроверка займёт немного времени, зато сразу покажет все доступные варианты качества и размер файла."))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private var destinationRow: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(tr("Папка назначения"))
-                .font(.subheadline.weight(.semibold))
-            HStack {
-                Text(destinationPath)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor)))
-                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(nsColor: .separatorColor)))
-                Button(tr("Выбрать…")) { chooseFolder() }
-            }
-        }
-    }
-
-    private var actionRow: some View {
-        let busy = manager.isRunning || manager.isPaused
-        return VStack(alignment: .leading, spacing: 6) {
-            // The same four controls all the time; while a download is going they just go grey.
-            HStack {
-                Button { startDownload(audioOnly: false) } label: {
-                    Label(tr("Скачать видео"), systemImage: "arrow.down.circle.fill")
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(!canDownload)
-
-                Picker("", selection: $videoFormat) {
-                    ForEach(VideoFormat.allCases) { Text($0.title).tag($0.rawValue) }
-                }
-                .labelsHidden()
-                .fixedSize()
-                .disabled(busy)
-                .opacity(busy ? 0.35 : 0.7)
-                .help(tr("Формат видео"))
-
-                Button { startDownload(audioOnly: true) } label: {
-                    Label(tr("Скачать звук"), systemImage: "waveform.circle.fill")
-                }
-                .disabled(!canDownload)
-
-                Picker("", selection: $audioFormat) {
-                    ForEach(AudioFormat.allCases) { Text($0.title).tag($0.rawValue) }
-                }
-                .labelsHidden()
-                .fixedSize()
-                .disabled(busy)
-                .opacity(busy ? 0.35 : 0.7)
-                .help(tr("Формат звука"))
-
-            }
-
-            Toggle(tr("Скачать видео без звука"), isOn: $videoNoAudio)
+            .buttonStyle(.plain)
+            .help(destinationPath)
+            Text("·")
+            Toggle(tr("без звука"), isOn: $videoNoAudio)
                 .toggleStyle(.checkbox)
-                .font(.caption)
-                .disabled(busy)
+                .disabled(busy || downloadMode == "audio")
         }
+        .font(.caption)
+        .foregroundStyle(.secondary)
     }
 
     private var progressSection: some View {
@@ -740,38 +728,30 @@ struct ContentView: View {
             } else {
                 ProgressView(value: manager.progress)
             }
-            Text(manager.statusLine.isEmpty ? " " : manager.statusLine)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-
-            HStack {
+            HStack(alignment: .firstTextBaseline, spacing: 14) {
+                Text(manager.statusLine.isEmpty ? " " : manager.statusLine)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 8)
                 if manager.isPaused {
-                    Button { manager.resume() } label: {
-                        Label(tr("Продолжить"), systemImage: "play.fill")
-                    }
-                    .keyboardShortcut(.defaultAction)
+                    Button(tr("Продолжить")) { manager.resume() }
                 } else {
-                    Button { manager.pause() } label: {
-                        Label(tr("Пауза"), systemImage: "pause.fill")
-                    }
-                    .disabled(!(manager.isRunning && manager.canPause))
+                    Button(tr("Пауза")) { manager.pause() }
+                        .disabled(!(manager.isRunning && manager.canPause))
                 }
-                Button(role: .destructive) { manager.cancel() } label: {
-                    Label(tr("Отменить"), systemImage: "stop.fill")
-                }
-                .disabled(!(manager.isRunning || manager.isPaused))
-                Button {
+                Button(tr("Отменить")) { manager.cancel() }
+                    .disabled(!(manager.isRunning || manager.isPaused))
+                Button(tr("Показать файл")) {
                     if let file = manager.lastDownloadedFile {
                         NSWorkspace.shared.activateFileViewerSelecting([file])
                     }
-                } label: {
-                    Label(tr("Показать файл"), systemImage: "doc.viewfinder")
                 }
                 .disabled(manager.lastDownloadedFile == nil)
             }
-            .padding(.top, 2)
+            .buttonStyle(.plain)
+            .font(.caption)
 
             // A running counter under the status line — so a long, quiet
             // wait (Homebrew install, transcode, download not yet started)
@@ -827,7 +807,7 @@ struct ContentView: View {
                             .font(.caption2)
                             .foregroundStyle(.green)
                     case .failed:
-                        Text(tr("Не удалось отправить — текст скопирован, отправьте вручную в Telegram"))
+                        Text(tr("Не удалось отправить — текст скопирован, отправь вручную в Telegram"))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -840,7 +820,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 8) {
             Label(tr("Нужен «Полный доступ к диску»"), systemImage: "lock.shield")
                 .font(.callout.bold())
-            Text(tr("Чтобы взять cookies из Safari для видео, требующих входа, добавьте это приложение в список. Один раз."))
+            Text(tr("Чтобы взять cookies из Safari для видео, требующих входа, добавь это приложение в список. Один раз. Нет в списке? В настройках нажми «+» и добавь Scorpena из папки, куда ты её установил."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -849,9 +829,6 @@ struct ContentView: View {
                     if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
                         NSWorkspace.shared.open(url)
                     }
-                }
-                Button(tr("Показать приложение")) {
-                    NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL])
                 }
             }
         }
@@ -877,7 +854,7 @@ struct ContentView: View {
                 Button(tr("Проверить снова")) { manager.refreshTools() }
             }
             if !manager.hasHomebrew {
-                Text(tr("Homebrew не найден — поставьте его с brew.sh. Обычно инструменты уже вшиты в приложение при сборке."))
+                Text(tr("Homebrew не найден — поставь его с brew.sh. Обычно инструменты уже вшиты в приложение при сборке."))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1057,6 +1034,41 @@ final class MainWindowFitter: ObservableObject {
     }
 }
 
+/// A small segmented control (title + options). Only the group that holds the
+/// current download choice shows its selection.
+private struct FormatSegments: View {
+    let title: String
+    let options: [(id: String, label: String)]
+    let selected: String
+    let active: Bool
+    let disabled: Bool
+    let onPick: (String) -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack(spacing: 0) {
+                ForEach(options, id: \.id) { option in
+                    let isOn = active && option.id == selected
+                    Text(option.label)
+                        .font(.caption)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .foregroundStyle(isOn ? Color.primary : Color.secondary)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(isOn ? Color(nsColor: .textBackgroundColor) : Color.clear))
+                        .contentShape(Rectangle())
+                        .onTapGesture { if !disabled { onPick(option.id) } }
+                }
+            }
+            .padding(2)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.08)))
+        }
+        .opacity(disabled ? 0.45 : 1)
+    }
+}
+
 /// A faint diagonal-line hint in the corner so the window doesn't look
 /// like a fixed-size dialog — visible on close inspection, not distracting.
 private struct ResizeGripView: View {
@@ -1135,7 +1147,7 @@ final class InfoPanel {
     static let legal = InfoPanel(title: "Правовая информация", size: NSSize(width: 520, height: 640)) {
         AnyView(LegalView(onClose: $0))
     }
-    static let feedback = InfoPanel(title: "Обратная связь", size: NSSize(width: 480, height: 460)) {
+    static let feedback = InfoPanel(title: "Обратная связь", size: NSSize(width: 480, height: 500)) {
         AnyView(FeedbackView(onClose: $0))
     }
 
@@ -1220,25 +1232,20 @@ struct AdvancedSettingsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 16) {
-                notificationsBlock
-                Divider()
-                speedBlock
-                Divider()
-                toolsBlock
-                Divider()
-                languageBlock
-                Divider()
-                diagnosticsBlock
+            VStack(alignment: .leading, spacing: 12) {
+                notificationsBlock.card()
+                speedBlock.card()
+                toolsBlock.card()
+                languageBlock.card()
+                diagnosticsBlock.card()
             }
-            .padding(20)
-            Divider()
+            .padding(EdgeInsets(top: 20, leading: 20, bottom: 6, trailing: 20))
             Button(tr("Закрыть")) { onClose() }
+                .buttonStyle(PrimaryPillStyle())
                 .keyboardShortcut(.defaultAction)
-                .controlSize(.large)
-                .padding(14)
+                .padding(.vertical, 16)
         }
-        .frame(width: 440)
+        .frame(width: 460)
         .fixedSize(horizontal: false, vertical: true)
     }
 
@@ -1301,6 +1308,7 @@ struct AdvancedSettingsView: View {
                         Text(tr("Проверить сейчас"))
                     }
                 }
+                .buttonStyle(SoftPillStyle())
                 .disabled(manager.isRunning || manager.isCheckingToolUpdate)
 
                 if let version = manager.ytDlpVersion {
@@ -1457,7 +1465,10 @@ struct LanguagePickerView: View {
 
     var body: some View {
         VStack(spacing: 22) {
-            Text("Выберите язык / Choose your language")
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .frame(width: 56, height: 56)
+            Text("Выбери язык / Choose your language")
                 .font(.title3.bold())
             HStack(spacing: 16) {
                 option(flag: "🇷🇺", name: "Русский", language: .ru)
@@ -1477,7 +1488,11 @@ struct LanguagePickerView: View {
                 Text(name).font(.callout.weight(.semibold))
             }
             .frame(width: 140, height: 100)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .textBackgroundColor)))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color(nsColor: .separatorColor)))
+            .contentShape(RoundedRectangle(cornerRadius: 12))
         }
+        .buttonStyle(.plain)
     }
 }
 
@@ -1503,22 +1518,19 @@ final class WhatsNewPanel {
         win.title = trf("Список изменений (v.%@)", version)
         win.isReleasedWhenClosed = false
         win.isRestorable = false
-        win.setContentSize(NSSize(width: 480, height: 520))
+        win.setContentSize(NSSize(width: WhatsNewView.windowWidth, height: WhatsNewView.windowHeight(version: version)))
         win.centerExactlyOnScreen()
         win.makeKeyAndOrderFront(nil)
         window = win
     }
 }
 
-struct WhatsNewView: View {
+/// The list of changes in a card, and the highlighted call to action under it.
+private struct WhatsNewList: View {
     let version: String
-    let closeTitle: String
-    var onClose: () -> Void
-
-    @ObservedObject private var languageSettings = LanguageSettings.shared
 
     var body: some View {
-        InfoScaffold(width: 480, height: 520, closeTitle: closeTitle, onClose: onClose) {
+        VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(ContentView.changelog[version] ?? [], id: \.self) { item in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -1527,14 +1539,93 @@ struct WhatsNewView: View {
                     }
                 }
             }
+            .card()
+
+            if let callout = ContentView.changelogCallouts[version] {
+                HStack(spacing: 12) {
+                    Image(systemName: "dock.rectangle")
+                        .font(.title2)
+                        .foregroundStyle(Color.accentColor)
+                    Text(tr(callout))
+                        .fontWeight(.semibold)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 12).fill(Color.accentColor.opacity(0.13)))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.accentColor.opacity(0.45)))
+            }
         }
     }
 }
 
-/// Scrollable body + a divider + one closing button at the bottom.
+struct WhatsNewView: View {
+    let version: String
+
+    /// Logo + the festive heading (three lines) when the version has one, else the plain title.
+    static func headerView(_ version: String) -> AnyView {
+        if let special = ContentView.changelogHeadlines[version] {
+            return AnyView(VStack(spacing: 6) {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .frame(width: 64, height: 64)
+                Text(tr(special.intro))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 4)
+                // The name stays black; "video downloader" is the quieter half.
+                (Text("Scorpena").bold().foregroundColor(.primary)
+                    + Text(" – video downloader").foregroundColor(.secondary))
+                    .font(.title2)
+                Text(tr(special.subtitle))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .padding(.top, 2)
+            }
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity))
+        }
+        return AnyView(WindowTitleRow(title: trf("Список изменений (v.%@)", version)))
+    }
+
+    static let windowWidth: CGFloat = 540
+
+    /// Exactly as tall as the text needs; past 560 pt it stops growing and scrolls.
+    static func windowHeight(version: String) -> CGFloat {
+        let probe = NSHostingView(rootView: VStack(alignment: .leading, spacing: 14) {
+            Self.headerView(version)
+            WhatsNewList(version: version)
+        }
+        .padding(EdgeInsets(top: 22, leading: 24, bottom: 14, trailing: 24))
+        .frame(width: windowWidth))
+        let buttonArea: CGFloat = 68
+        return min(ceil(probe.fittingSize.height) + buttonArea, 560)
+    }
+    let closeTitle: String
+    var onClose: () -> Void
+
+    @ObservedObject private var languageSettings = LanguageSettings.shared
+
+    var body: some View {
+        InfoScaffold(width: Self.windowWidth, height: Self.windowHeight(version: version),
+                     header: Self.headerView(version),
+                     closeTitle: closeTitle, onClose: onClose) {
+            WhatsNewList(version: version)
+        }
+    }
+}
+
+/// Scrollable body (optionally under the logo + title) and one closing button at the bottom.
 struct InfoScaffold<Content: View>: View {
     let width: CGFloat
     let height: CGFloat
+    var title: String? = nil
+    var subtitle: String? = nil
+    var header: AnyView? = nil
     let closeTitle: String
     let onClose: () -> Void
     @ViewBuilder var content: () -> Content
@@ -1542,15 +1633,18 @@ struct InfoScaffold<Content: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
-                content()
-                    .padding(20)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 14) {
+                    if let header { header } else if let title { WindowTitleRow(title: title, subtitle: subtitle) }
+                    content()
+                }
+                .padding(EdgeInsets(top: 22, leading: 24, bottom: 14, trailing: 24))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(AlwaysVisibleScroller())
             }
-            Divider()
             Button(closeTitle) { onClose() }
+                .buttonStyle(PrimaryPillStyle())
                 .keyboardShortcut(.defaultAction)
-                .controlSize(.large)
-                .padding(14)
+                .padding(.vertical, 16)
         }
         .frame(width: width, height: height)
     }
@@ -1558,7 +1652,7 @@ struct InfoScaffold<Content: View>: View {
 
 /// Bulleted "heading + items" block, shared by both windows.
 func infoSection(_ title: String, _ items: [String]) -> some View {
-    VStack(alignment: .leading, spacing: 7) {
+    VStack(alignment: .leading, spacing: 8) {
         Text(title).font(.headline)
         ForEach(items, id: \.self) { item in
             HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -1567,6 +1661,7 @@ func infoSection(_ title: String, _ items: [String]) -> some View {
             }
         }
     }
+    .card()
 }
 
 struct AboutView: View {
@@ -1577,12 +1672,12 @@ struct AboutView: View {
     var body: some View {
         InfoScaffold(width: 480, height: 600, closeTitle: tr("Благодарю"), onClose: onClose) {
             VStack(alignment: .leading, spacing: 14) {
-                Text(tr("Если видео перестало скачиваться — нажмите «Проверить сейчас» в разделе «Дополнительно». Сайты периодически меняют защиту, обновление её догоняет."))
+                Text(tr("Если видео перестало скачиваться — нажми «Проверить сейчас» в разделе «Дополнительно». Сайты периодически меняют защиту, обновление её догоняет."))
                     .font(.callout)
-                    .padding(12)
+                    .padding(14)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.accentColor.opacity(0.12)))
-                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.accentColor.opacity(0.35)))
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Color.accentColor.opacity(0.12)))
+                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.accentColor.opacity(0.35)))
 
                 HStack(alignment: .center, spacing: 10) {
                     Image(nsImage: NSApp.applicationIconImage)
@@ -1646,28 +1741,27 @@ struct FeedbackView: View {
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text(tr("Обратная связь")).font(.title2.bold())
-                    Text(tr("Вопросы, предложения, ошибки — что угодно. Уходит прямо разработчику."))
-                        .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 14) {
+                    WindowTitleRow(title: tr("Обратная связь"),
+                                   subtitle: tr("Вопросы, предложения, ошибки — что угодно. Уходит прямо разработчику."))
 
                     VStack(alignment: .leading, spacing: 6) {
                         Text(tr("Обращение")).font(.caption).foregroundStyle(.secondary)
-                        TextField(tr("Напишите сюда…"), text: $message, axis: .vertical)
-                            .textFieldStyle(.roundedBorder)
+                        TextField(tr("Напиши сюда…"), text: $message, axis: .vertical)
                             .lineLimit(3...6)
+                            .fieldStyle()
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
                         Text(tr("Имя (необязательно)")).font(.caption).foregroundStyle(.secondary)
-                        TextField(tr("Как вас зовут"), text: $name)
-                            .textFieldStyle(.roundedBorder)
+                        TextField(tr("Как тебя зовут"), text: $name)
+                            .fieldStyle()
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
                         Text(tr("Как связаться (необязательно)")).font(.caption).foregroundStyle(.secondary)
                         TextField(tr("Например, ссылка на Telegram"), text: $contact)
-                            .textFieldStyle(.roundedBorder)
+                            .fieldStyle()
                     }
 
                     if let cooldownNotice {
@@ -1681,17 +1775,17 @@ struct FeedbackView: View {
                             .foregroundStyle(.green)
                     }
                 }
-                .padding(20)
+                .padding(EdgeInsets(top: 22, leading: 24, bottom: 14, trailing: 24))
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .background(AlwaysVisibleScroller())
             }
-            Divider()
             Button(tr("Отправить")) { send() }
+                .buttonStyle(PrimaryPillStyle())
                 .keyboardShortcut(.defaultAction)
-                .controlSize(.large)
                 .disabled(message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .padding(14)
+                .padding(.vertical, 16)
         }
-        .frame(width: 480, height: 460)
+        .frame(width: 480, height: 500)
         .onAppear { cooldownNotice = nil; sentNotice = false }
     }
 
@@ -1702,7 +1796,7 @@ struct FeedbackView: View {
         let elapsed = Date().timeIntervalSince1970 - lastSendTime
         guard elapsed >= Self.cooldown else {
             let remaining = Int((Self.cooldown - elapsed).rounded(.up))
-            cooldownNotice = trf("Подождите ещё %d с перед следующим сообщением.", remaining)
+            cooldownNotice = trf("Подожди ещё %d с перед следующим сообщением.", remaining)
             return
         }
         cooldownNotice = nil
@@ -1743,32 +1837,37 @@ struct LegalView: View {
     @ObservedObject private var languageSettings = LanguageSettings.shared
 
     var body: some View {
-        InfoScaffold(width: 520, height: 640, closeTitle: tr("Понятно"), onClose: onClose) {
+        InfoScaffold(width: 520, height: 640, title: tr("Правовая информация"), closeTitle: tr("Понятно"), onClose: onClose) {
             VStack(alignment: .leading, spacing: 14) {
-                Text(tr("Это не юридическая консультация, а общие ориентиры. Законы отличаются в разных странах, поэтому перед использованием программы проверьте, что допускает закон в вашей стране. Если сомневаетесь — консультируйтесь с юристом."))
+                Text(tr("Это не юридическая консультация, а общие ориентиры. Законы отличаются в разных странах, поэтому перед использованием программы проверь, что допускает закон в твоей стране. Если сомневаешься — консультируйся с юристом."))
                     .font(.callout)
-                    .padding(12)
+                    .padding(14)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.12)))
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Color.secondary.opacity(0.12)))
 
-                para("Сама программа легальна.", "Внутри — открытый движок yt-dlp, Scorpena – video downloader просто удобная оболочка над ним. Она не взламывает сайты: берёт те же потоки, что сайт и так отдаёт браузеру.")
+                VStack(alignment: .leading, spacing: 10) {
+                    para("Сама программа легальна.", "Внутри — открытый движок yt-dlp, Scorpena – video downloader просто удобная оболочка над ним. Она не взламывает сайты: берёт те же потоки, что сайт и так отдаёт браузеру.")
 
-                Text(tr("Scorpena – video downloader позволяет сохранять видео и аудио локально. Убедитесь, что ваше использование соответствует законодательству вашей страны и условиям сервиса, с которого вы скачиваете контент."))
-                    .fixedSize(horizontal: false, vertical: true)
+                    Text(tr("Scorpena – video downloader позволяет сохранять видео и аудио локально. Убедись, что твоё использование соответствует законодательству твоей страны и условиям сервиса, с которого ты скачиваешь контент."))
+                        .fixedSize(horizontal: false, vertical: true)
 
-                para("Нельзя:", "обходить платную подписку и DRM (Netflix, Кинопоиск и т.д.) — программа этого и не умеет.")
+                    para("Нельзя:", "обходить платную подписку и DRM (Netflix, Кинопоиск и т.д.) — программа этого и не умеет.")
+                }
+                .card()
 
                 infoSection(tr("Ответственность"), [
-                    "Автор не отвечает за то, какие видео и с каких сайтов вы скачиваете, и за соблюдение вами законов, авторских прав и правил этих сайтов.",
-                    "Автор не отвечает за любой вред: потерю или повреждение файлов, сбои в работе, блокировку ваших аккаунтов, претензии правообладателей или сайтов.",
+                    "Автор не отвечает за то, какие видео и с каких сайтов ты скачиваешь, и за соблюдение тобой законов, авторских прав и правил этих сайтов.",
+                    "Автор не отвечает за любой вред: потерю или повреждение файлов, сбои в работе, блокировку твоих аккаунтов, претензии правообладателей или сайтов.",
                     "Автор не гарантирует, что программа работает, работает правильно или продолжит работать в будущем.",
                 ].map(tr))
 
                 para("Отчёты о сбоях.", "При серьёзных сбоях программа может отправить разработчику короткий анонимный отчёт без ссылок и личных данных. Отключить можно в «Дополнительно».")
+                    .card()
 
-                Text(tr("Программа распространяется бесплатно, в текущем виде, без каких-либо гарантий. Скачивая что-либо через программу, вы действуете на свой страх и риск и полностью принимаете ответственность на себя."))
+                Text(tr("Программа распространяется бесплатно, в текущем виде, без каких-либо гарантий. Скачивая что-либо через программу, ты действуешь на свой страх и риск и полностью принимаешь ответственность на себя."))
+                    .font(.callout)
                     .foregroundStyle(.secondary)
-                    .padding(.top, 2)
+                    .padding(.horizontal, 4)
             }
         }
     }
