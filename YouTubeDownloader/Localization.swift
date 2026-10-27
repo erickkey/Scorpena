@@ -224,6 +224,9 @@ enum Translations {
         "Распаковываю новую версию рядом со старой…": "Unpacking the new version next to the old one…",
         "Проверяю, что новая версия работает с YouTube, и только потом заменяю…": "Checking that the new version works with YouTube, and only then replacing…",
         "Без ограничения": "No limit",
+        "Скачивания платного и защищённого видео (Netflix, Кинопоиск, ivi, Okko и т.д.): оно закрыто DRM, системой шифрования от копирования.": "Downloading paid and protected video (Netflix, Kinopoisk, ivi, Okko, etc.): it is locked with DRM, an encryption system against copying.",
+        "Записи идущих прямых эфиров: только уже завершённых.": "Recording live streams that are still going: only finished ones.",
+        "Скачивания плейлистов.": "Downloading playlists.",
         "Звук уведомления о скачивании": "Download notification sound",
         "Звук запуска приложения": "App launch sound",
         "Конвертация в %@…": "Converting to %@…",
@@ -282,11 +285,6 @@ enum Translations {
         "Обновление программы одной кнопкой.": "Updating the app with one button.",
         "Любой Mac: Intel и Apple Silicon, macOS 13 и новее.": "Any Mac: Intel and Apple Silicon, macOS 13 or newer.",
         "Чего нет": "What's not included",
-        "Скачивать платное и защищённое видео (Netflix, Кинопоиск, ivi, Okko и т.д.) — оно закрыто DRM (система шифрования от копирования).":
-            "Download paid or protected video (Netflix, Kinopoisk, ivi, Okko, etc.) — it's locked with DRM (copy-protection encryption).",
-        "Скачивать плейлист целиком — только по одной ссылке за раз.": "Download a whole playlist — only one link at a time.",
-        "Записывать идущие прямые эфиры — только уже завершённые.": "Record a live stream in progress — only ones that have already ended.",
-        "Скачивать субтитры и вырезать фрагменты.": "Download subtitles or cut out clips.",
         "Благодарю": "Thanks",
 
         // MARK: Feedback window
