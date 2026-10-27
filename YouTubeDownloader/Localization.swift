@@ -124,16 +124,16 @@ enum Translations {
         "с": "s",
         "Программа запрашивает у сайта данные о видео: адреса потоков и способ обхода защиты. Обычно 2–10 секунд.":
             "The app is asking the site for the video's info: stream addresses and how to get past its protection. Usually 2–10 seconds.",
-        "Сайт отдаёт видео множеством мелких кусков, а не одним файлом — их приходится качать по очереди, поэтому медленнее обычного. Vimeo почти всегда так.":
-            "The site serves the video as many small pieces instead of one file, so they have to be downloaded one by one — slower than usual. Vimeo is almost always like this.",
+        "Сайт отдаёт видео множеством мелких кусков, а не одним файлом — их приходится качать по очереди, поэтому медленнее обычного. У Vimeo почти всегда так.":
+            "The site serves the video in lots of tiny pieces instead of one file — they have to be downloaded one by one, so it's slower than usual. Vimeo almost always does this.",
         "Сообщить об ошибке": "Report a problem",
         "Отправлено (обращение №%@) — спасибо!": "Sent (ticket #%@) — thanks!",
         "Не удалось отправить — текст скопирован, отправь вручную в Telegram": "Couldn't send it — the text was copied, send it manually via Telegram",
 
         // MARK: Banners
         "Нужен «Полный доступ к диску»": "“Full Disk Access” needed",
-        "Чтобы взять cookies из Safari для видео, требующих входа, добавь это приложение в список. Один раз. Нет в списке? В настройках нажми «+» и добавь Scorpena из папки, куда ты её установил.":
-            "To grab cookies from Safari for videos that need a login, add this app to the list. Once. Not in the list? In Settings click “+” and add Scorpena from the folder you installed it in.",
+        "Чтобы взять cookies из Safari для видео, требующих входа, включи для Scorpena «Полный доступ к диску» в настройках. Один раз. Нет Scorpena в списке? Нажми «+» и добавь её из папки, куда ты её установил.":
+            "To grab cookies from Safari for videos that need a login, turn on “Full Disk Access” for Scorpena in Settings. Once. Scorpena isn't in the list? Click “+” and add it from the folder you installed it in.",
         "Открыть настройки": "Open Settings",
         "Не хватает инструментов": "Missing tools",
         "yt-dlp: %@\nffmpeg: %@": "yt-dlp: %@\nffmpeg: %@",
@@ -370,8 +370,8 @@ enum Translations {
         "Нужен доступ к диску": "Disk access required",
         "Нужен вход в аккаунт": "Login required",
         "Ошибка": "Error",
-        "Это видео требует входа в аккаунт. Чтобы взять cookies из браузера, приложению нужен доступ к диску. Нажми «Открыть настройки» — в списке приложений найди Scorpena и включи «Полный доступ к диску» (если его там нет — добавь кнопкой «+»). Перезапусти приложение и повтори.":
-            "This video requires being logged in. To grab cookies from your browser, the app needs disk access. Click “Open Settings” — find Scorpena in the list of apps and turn on “Full Disk Access” (if it's not listed — add it with the “+” button). Restart the app and try again.",
+        "Это видео требует входа в аккаунт. Чтобы взять cookies из браузера, приложению нужен доступ к диску. Нажми «Открыть настройки» — в списке приложений найди Scorpena и включи «Полный доступ к диску» (если Scorpena там нет — добавь её кнопкой «+»). Перезапусти приложение и повтори.":
+            "This video requires being logged in. To grab cookies from your browser, the app needs disk access. Click “Open Settings” — find Scorpena in the list of apps and turn on “Full Disk Access” (if Scorpena isn't there, add it with the “+” button). Restart the app and try again.",
         "Для скачивания требуется вход в аккаунт:\n\nСайт отдаёт это видео только при входе в аккаунт. Войди на сайт в браузере и повтори. Например, Vimeo сейчас требует вход почти для всех роликов, даже открытых.":
             "Logging in is required to download this:\n\nThe site only serves this video to logged-in accounts. Log in to the site in your browser and try again. For example, Vimeo now requires login for almost all videos, even public ones.",
         "Что-то пошло не так. Попробуй ещё раз или сообщи об ошибке. А пока попробуй другую ссылку.":

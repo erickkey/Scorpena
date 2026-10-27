@@ -774,7 +774,7 @@ struct ContentView: View {
             }
 
             if manager.isRunning && manager.fragmentedDownload && manager.slowFragmentedSite {
-                Text(tr("Сайт отдаёт видео множеством мелких кусков, а не одним файлом — их приходится качать по очереди, поэтому медленнее обычного. Vimeo почти всегда так."))
+                Text(tr("Сайт отдаёт видео множеством мелких кусков, а не одним файлом — их приходится качать по очереди, поэтому медленнее обычного. У Vimeo почти всегда так."))
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -820,7 +820,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 8) {
             Label(tr("Нужен «Полный доступ к диску»"), systemImage: "lock.shield")
                 .font(.callout.bold())
-            Text(tr("Чтобы взять cookies из Safari для видео, требующих входа, добавь это приложение в список. Один раз. Нет в списке? В настройках нажми «+» и добавь Scorpena из папки, куда ты её установил."))
+            Text(tr("Чтобы взять cookies из Safari для видео, требующих входа, включи для Scorpena «Полный доступ к диску» в настройках. Один раз. Нет Scorpena в списке? Нажми «+» и добавь её из папки, куда ты её установил."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
