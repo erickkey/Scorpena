@@ -1252,23 +1252,17 @@ struct AdvancedSettingsView: View {
     private var notificationsBlock: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(tr("Уведомления")).font(.subheadline.weight(.semibold))
-            // "on" = the sound plays (the stored flags say "muted", so they are inverted here)
+            // ticked = the sound plays (the stored flags say "muted", so they are inverted here)
             switchRow(tr("Звук уведомления о скачивании"), isOn: Binding(get: { !muteChime }, set: { muteChime = !$0 }))
             switchRow(tr("Звук запуска приложения"), isOn: Binding(get: { !muteLaunchSound }, set: { muteLaunchSound = !$0 }))
         }
     }
 
-    /// A small on/off switch in front of its label (green when on).
+    /// A checkbox with its label.
     private func switchRow(_ title: String, isOn: Binding<Bool>) -> some View {
-        HStack(spacing: 10) {
-            Toggle("", isOn: isOn)
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .controlSize(.small)
-                .tint(.green)
-            Text(title).font(.callout)
-            Spacer(minLength: 0)
-        }
+        Toggle(title, isOn: isOn)
+            .toggleStyle(.checkbox)
+            .font(.callout)
     }
 
     private var speedBlock: some View {
