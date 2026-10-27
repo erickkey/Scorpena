@@ -1338,9 +1338,7 @@ struct AdvancedSettingsView: View {
     private var diagnosticsBlock: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(tr("Отчёты о сбоях")).font(.subheadline.weight(.semibold))
-            Toggle(tr("Отправлять разработчику анонимные отчёты о сбоях"), isOn: $sendDiagnostics)
-                .toggleStyle(.checkbox)
-                .font(.caption)
+            switchRow(tr("Отправлять разработчику анонимные отчёты о сбоях"), isOn: $sendDiagnostics)
             Text(tr("Анонимно, без ссылок и личных данных."))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
