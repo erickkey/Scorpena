@@ -1663,7 +1663,11 @@ func infoSection(_ title: String, _ items: [String]) -> some View {
         ForEach(items, id: \.self) { item in
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("•").foregroundStyle(.secondary)
-                Text(item).fixedSize(horizontal: false, vertical: true)
+                if item.contains("⚙") {
+                    TextWithGear(text: item, action: { AdvancedSettingsPanel.shared.show() })
+                } else {
+                    Text(item).fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }
@@ -1709,7 +1713,7 @@ struct AboutView: View {
                     "Сама подставляет ссылку из буфера обмена и предупреждает, если это не ссылка.",
                     "Хранит историю последних скачиваний.",
                     "Можно поставить скачивание на паузу и продолжить его, даже если пропал интернет или программа была закрыта.",
-                    "Скорость скачивания можно ограничить в «Дополнительно».",
+                    "Скорость скачивания можно ограничить в «Дополнительно» (⚙).",
                     "Если что-то пошло не так — отчёт об ошибке отправляется разработчику.",
                     "Работает на русском и английском.",
                     "Обновляется одной кнопкой.",

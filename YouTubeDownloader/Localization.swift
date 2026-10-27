@@ -280,7 +280,7 @@ enum Translations {
         "Работает на русском и английском.": "Works in Russian and English.",
         "Хранит историю последних скачиваний.": "Keeps a history of your recent downloads.",
         "Можно поставить скачивание на паузу и продолжить его, даже если пропал интернет или программа была закрыта.": "You can pause a download and resume it, even if the internet drops or the app was closed.",
-        "Скорость скачивания можно ограничить в «Дополнительно».": "Download speed can be limited in “Advanced”.",
+        "Скорость скачивания можно ограничить в «Дополнительно» (⚙).": "You can limit the download speed in “Advanced” (⚙).",
         "Обновляется одной кнопкой.": "Updates with one button.",
         "Работает на любом Mac (Intel и Apple Silicon), macOS 13 и новее.":
             "Works on any Mac (Intel and Apple Silicon), macOS 13 and newer.",
