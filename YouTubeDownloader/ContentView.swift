@@ -678,6 +678,10 @@ struct ContentView: View {
     private var settingsLine: some View {
         let busy = manager.isRunning || manager.isPaused
         return HStack(spacing: 8) {
+            Toggle(tr("без звука"), isOn: $videoNoAudio)
+                .toggleStyle(.checkbox)
+                .disabled(busy || downloadMode == "audio")
+            Text("·")
             Menu {
                 Button(tr("Проверить качество")) { manager.probeQuality(urlString: urlString) }
                     .disabled(!isPlausibleURL || manager.isProbing || manager.isRunning)
@@ -713,10 +717,6 @@ struct ContentView: View {
             }
             .buttonStyle(.plain)
             .help(destinationPath)
-            Text("·")
-            Toggle(tr("без звука"), isOn: $videoNoAudio)
-                .toggleStyle(.checkbox)
-                .disabled(busy || downloadMode == "audio")
         }
         .font(.caption)
         .foregroundStyle(.secondary)
