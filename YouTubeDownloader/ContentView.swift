@@ -1258,15 +1258,16 @@ struct AdvancedSettingsView: View {
         }
     }
 
-    /// A label on the left and an on/off switch on the right (green when on).
+    /// A small on/off switch in front of its label (green when on).
     private func switchRow(_ title: String, isOn: Binding<Bool>) -> some View {
-        HStack {
-            Text(title).font(.callout)
-            Spacer(minLength: 12)
+        HStack(spacing: 10) {
             Toggle("", isOn: isOn)
                 .labelsHidden()
                 .toggleStyle(.switch)
+                .controlSize(.small)
                 .tint(.green)
+            Text(title).font(.callout)
+            Spacer(minLength: 0)
         }
     }
 
