@@ -271,7 +271,7 @@ enum Translations {
         "Скопируй ссылку и нажми «Скачать»": "Copy the link and hit “Download”",
         "Нативное приложение для Mac — скачивает видео и аудио с YouTube, VK, Instagram, TikTok, Vimeo и ещё ~1750 сайтов одним кликом. Видео — в MP4, MOV, WebM или MKV, звук — в MP3, WAV или M4A: формат выбирается рядом с кнопками скачивания.":
             "A native Mac app — downloads video and audio from YouTube, VK, Instagram, TikTok, Vimeo, and ~1750 other sites in one click. Video as MP4, MOV, WebM or MKV, audio as MP3, WAV or M4A: pick the format next to the download buttons.",
-        "Что есть в программе": "What's in the app",
+        "Что есть": "What's included",
         "Размер файла и доступное качество видны до скачивания.": "File size and available quality are shown before downloading.",
         "Ссылка из буфера обмена подставляется сама.": "A link from the clipboard is filled in automatically.",
         "Отчёт об ошибке разработчику в один клик.": "Error report to the developer in one click.",
@@ -281,7 +281,7 @@ enum Translations {
         "Ограничение скорости скачивания в «Дополнительно» (⚙).": "Download speed limit in “Advanced” (⚙).",
         "Обновление программы одной кнопкой.": "Updating the app with one button.",
         "Любой Mac: Intel и Apple Silicon, macOS 13 и новее.": "Any Mac: Intel and Apple Silicon, macOS 13 or newer.",
-        "Что не умеет": "What it can't do",
+        "Чего нет": "What's not included",
         "Скачивать платное и защищённое видео (Netflix, Кинопоиск, ivi, Okko и т.д.) — оно закрыто DRM (система шифрования от копирования).":
             "Download paid or protected video (Netflix, Kinopoisk, ivi, Okko, etc.) — it's locked with DRM (copy-protection encryption).",
         "Скачивать плейлист целиком — только по одной ссылке за раз.": "Download a whole playlist — only one link at a time.",
