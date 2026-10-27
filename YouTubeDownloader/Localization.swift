@@ -234,7 +234,6 @@ enum Translations {
         "Качество (доступное для этого видео):": "Quality (available for this video):",
         "Выбрать папку для сохранения": "Choose where to save",
         "Папка:": "Folder:",
-        "Если надо замедлиться. Скорость указана и в мегабитах — как в тарифе провайдера, и в мегабайтах": "If you need to slow it down. The speed is shown both in megabits — like on your internet plan — and in megabytes",
         "%d Мбит/с": "%d Mbit/s",
         "≈ %@ МБ/с": "≈ %@ MB/s",
         "Упаковка в %@…": "Packing into %@…",

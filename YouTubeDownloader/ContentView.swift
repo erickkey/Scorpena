@@ -1285,10 +1285,6 @@ struct AdvancedSettingsView: View {
                 .frame(width: 150, alignment: .leading)
             }
             .onChange(of: speedStep) { _ in manager.speedLimitChanged() }
-            Text(tr("Если надо замедлиться. Скорость указана и в мегабитах — как в тарифе провайдера, и в мегабайтах"))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
