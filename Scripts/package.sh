@@ -69,6 +69,26 @@ if [ -f "$BG" ]; then
     mkdir "$STAGE/.background"
     cp "$BG" "$STAGE/.background/bg.png"
 fi
+# "Открыть настройки" — a shortcut that opens Privacy & Security straight away
+# (for the "can't be opened" case); an .inetloc keeps working with the
+# download quarantine flag where a .webloc to this address does not.
+SETTINGS_FILE="$STAGE/Открыть настройки.inetloc"
+cat > "$SETTINGS_FILE" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<string>x-apple.systempreferences:com.apple.preference.security?General</string>
+</dict>
+</plist>
+PLIST
+if [ -f "$HERE/settings-icon.png" ]; then
+    swift "$HERE/set-file-icon.swift" "$HERE/settings-icon.png" "$SETTINGS_FILE" \
+        || echo "note: could not set the icon on the settings shortcut"
+fi
+SetFile -a E "$SETTINGS_FILE" 2>/dev/null || true   # hide the extension
+
 # volume icon = app icon
 if [ -f "$APP/Contents/Resources/AppIcon.icns" ]; then
     cp "$APP/Contents/Resources/AppIcon.icns" "$STAGE/.VolumeIcon.icns"
@@ -90,7 +110,7 @@ tell application "Finder"
         set current view of container window to icon view
         set toolbar visible of container window to false
         set statusbar visible of container window to false
-        set the bounds of container window to {200, 120, 840, 548}
+        set the bounds of container window to {200, 120, 840, 628}
         set opts to the icon view options of container window
         set arrangement of opts to not arranged
         set icon size of opts to 96
@@ -105,8 +125,11 @@ tell application "Finder"
         try
             set background picture of opts to file ".background:bg.png"
         end try
-        set position of item "$NAME.app" of container window to {150, 185}
-        set position of item "Applications" of container window to {490, 185}
+        set position of item "$NAME.app" of container window to {150, 190}
+        set position of item "Applications" of container window to {490, 190}
+        try
+            set position of item "Открыть настройки.inetloc" of container window to {112, 372}
+        end try
         update without registering applications
         delay 1
         close
