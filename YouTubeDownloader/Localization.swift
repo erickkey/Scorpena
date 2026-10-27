@@ -276,7 +276,7 @@ enum Translations {
             "Shows the file size and available quality before you download.",
         "Сама подставляет ссылку из буфера обмена и предупреждает, если это не ссылка.":
             "Auto-fills the link from your clipboard, and warns if it's not actually a link.",
-        "Если что-то пошло не так — отчёт об ошибке отправляется разработчику.": "If something goes wrong, an error report is sent to the developer.",
+        "Если что-то пошло не так, отправь отчёт об ошибке разработчику в один клик.": "If something goes wrong, send an error report to the developer in one click.",
         "Работает на русском и английском.": "Works in Russian and English.",
         "Хранит историю последних скачиваний.": "Keeps a history of your recent downloads.",
         "Можно поставить скачивание на паузу и продолжить его, даже если пропал интернет или программа была закрыта.": "You can pause a download and resume it, even if the internet drops or the app was closed.",
