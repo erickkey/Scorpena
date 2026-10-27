@@ -271,19 +271,16 @@ enum Translations {
         "Скопируй ссылку и нажми «Скачать»": "Copy the link and hit “Download”",
         "Нативное приложение для Mac — скачивает видео и аудио с YouTube, VK, Instagram, TikTok, Vimeo и ещё ~1750 сайтов одним кликом. Видео — в MP4, MOV, WebM или MKV, звук — в MP3, WAV или M4A: формат выбирается рядом с кнопками скачивания.":
             "A native Mac app — downloads video and audio from YouTube, VK, Instagram, TikTok, Vimeo, and ~1750 other sites in one click. Video as MP4, MOV, WebM or MKV, audio as MP3, WAV or M4A: pick the format next to the download buttons.",
-        "Что умеет": "What it can do",
-        "Показывает размер файла и доступное качество до скачивания.":
-            "Shows the file size and available quality before you download.",
-        "Сама подставляет ссылку из буфера обмена и предупреждает, если это не ссылка.":
-            "Auto-fills the link from your clipboard, and warns if it's not actually a link.",
-        "Если что-то пошло не так, отправь отчёт об ошибке разработчику в один клик.": "If something goes wrong, send an error report to the developer in one click.",
-        "Работает на русском и английском.": "Works in Russian and English.",
-        "Хранит историю последних скачиваний.": "Keeps a history of your recent downloads.",
-        "Можно поставить скачивание на паузу и продолжить его, даже если пропал интернет или программа была закрыта.": "You can pause a download and resume it, even if the internet drops or the app was closed.",
-        "Скорость скачивания можно ограничить в «Дополнительно» (⚙).": "You can limit the download speed in “Advanced” (⚙).",
-        "Обновляется одной кнопкой.": "Updates with one button.",
-        "Работает на любом Mac (Intel и Apple Silicon), macOS 13 и новее.":
-            "Works on any Mac (Intel and Apple Silicon), macOS 13 and newer.",
+        "Что есть в программе": "What's in the app",
+        "Размер файла и доступное качество видны до скачивания.": "File size and available quality are shown before downloading.",
+        "Ссылка из буфера обмена подставляется сама.": "A link from the clipboard is filled in automatically.",
+        "Отчёт об ошибке разработчику в один клик.": "Error report to the developer in one click.",
+        "Русский и английский языки.": "Russian and English languages.",
+        "История последних скачиваний.": "History of recent downloads.",
+        "Пауза и продолжение скачивания, даже если пропал интернет или программа была закрыта.": "Pause and resume downloads, even if the internet drops or the app was closed.",
+        "Ограничение скорости скачивания в «Дополнительно» (⚙).": "Download speed limit in “Advanced” (⚙).",
+        "Обновление программы одной кнопкой.": "Updating the app with one button.",
+        "Любой Mac: Intel и Apple Silicon, macOS 13 и новее.": "Any Mac: Intel and Apple Silicon, macOS 13 or newer.",
         "Что не умеет": "What it can't do",
         "Скачивать платное и защищённое видео (Netflix, Кинопоиск, ivi, Okko и т.д.) — оно закрыто DRM (система шифрования от копирования).":
             "Download paid or protected video (Netflix, Kinopoisk, ivi, Okko, etc.) — it's locked with DRM (copy-protection encryption).",
