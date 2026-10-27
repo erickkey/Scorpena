@@ -683,8 +683,9 @@ struct ContentView: View {
                 .disabled(busy || downloadMode == "audio")
             Text("·")
             Menu {
+                // Already checked for this link (the result is dropped when the link changes).
                 Button(tr("Проверить качество")) { manager.probeQuality(urlString: urlString) }
-                    .disabled(!isPlausibleURL || manager.isProbing || manager.isRunning)
+                    .disabled(!isPlausibleURL || manager.isProbing || manager.isRunning || !manager.availableHeights.isEmpty)
                 Divider()
                 Button { qualityHeight = 0 } label: {
                     if qualityHeight == 0 { Label(maxOptionMenuLabel, systemImage: "checkmark") } else { Text(maxOptionMenuLabel) }
