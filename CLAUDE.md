@@ -8,18 +8,24 @@ it corrupts the file — that's why README warns about it).
 
 ## Current release status (check before assuming anything is live)
 
-- **Last actually published GitHub release: v1.07.** Verify with:
-  `gh release list --repo erickkey/VideoDownloader`
-- Everything after v1.07 is **uncommitted working-tree changes** as of this
-  writing (`git status` / `git diff --stat` to see the real scope — do not
-  trust conversation history for this, always check git directly).
-- Local `Scripts/build-app.sh` `APP_VERSION` is currently `"1.08"`, and
-  `ContentView.swift`'s `changelog["1.08"]` array already has the
-  user-approved "What's New" text baked in for that version.
-- **Do not commit, build a release DMG, or run `gh release create/upload`
-  without the user explicitly saying so in that session.** This has been
-  asked for explicitly multiple times — treat it as a hard rule, not a
-  one-off.
+- The app is being renamed **VideoDownloader → Scorpena ("Scorpena – video downloader")**.
+- **Last published GitHub release: v2.1** (`gh release list --repo erickkey/VideoDownloader`).
+- **Version 3.0 is finished but NOT published.** It lives on the local git branch
+  `scorpena-3.0` (not pushed; `main`/origin are still v2.1). The full state, every
+  decision, the approved 3.0 changelog and the release order are in the memory file
+  `project_scorpena_rename_3_0.md` — read it first.
+- `Scripts/build-app.sh` has `APP_VERSION="3.0"`; `version.json` is still `2.1`
+  and is bumped LAST when publishing.
+- Releases must carry TWO DMGs: `Scorpena.dmg` and the legacy `VideoDownloader.dmg`
+  (installed 2.0/2.1 apps fetch exactly that file name). The GitHub repo is renamed
+  to Scorpena at release time, on the user's explicit go.
+- Texts in the app use the informal «ты» everywhere. The user wants short,
+  non-technical UI wording and approves every changelog/About/Legal change.
+- **Do not push, build a release DMG, or run `gh release create/upload` without the
+  user explicitly saying so in that session** (one approval = one action). Local
+  commits on `scorpena-3.0` are fine when the user asks to "save" the work.
+- Never detach a mounted DMG by volume name (the user may have their own
+  `VideoDownloader.dmg` mounted); use `hdiutil info` and detach only your own image.
 
 ## Standing workflow rule: changelog approval before publishing
 
