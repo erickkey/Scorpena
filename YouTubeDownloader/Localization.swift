@@ -135,13 +135,6 @@ enum Translations {
         "Чтобы взять cookies из Safari для видео, требующих входа, включи для Scorpena «Полный доступ к диску» в настройках. Один раз. Нет Scorpena в списке? Нажми «+» и добавь её из папки, куда ты её установил.":
             "To grab cookies from Safari for videos that need a login, turn on “Full Disk Access” for Scorpena in Settings. Once. Scorpena isn't in the list? Click “+” and add it from the folder you installed it in.",
         "Открыть настройки": "Open Settings",
-        "Не хватает инструментов": "Missing tools",
-        "yt-dlp: %@\nffmpeg: %@": "yt-dlp: %@\nffmpeg: %@",
-        "не найден": "not found",
-        "Установить через Homebrew": "Install via Homebrew",
-        "Проверить снова": "Check again",
-        "Homebrew не найден — поставь его с brew.sh. Обычно инструменты уже вшиты в приложение при сборке.":
-            "Homebrew not found — install it from brew.sh. The tools are usually already bundled with the app.",
 
         // MARK: Advanced settings window
         "Закрыть": "Close",
@@ -224,6 +217,10 @@ enum Translations {
         "Распаковываю новую версию рядом со старой…": "Unpacking the new version next to the old one…",
         "Проверяю, что новая версия работает с YouTube, и только потом заменяю…": "Checking that the new version works with YouTube, and only then replacing…",
         "Без ограничения": "No limit",
+        "Внутри программы не хватает файлов. Скачай Scorpena заново.": "Some files inside the app are missing. Download Scorpena again.",
+        "Внутри программы не хватает файлов": "Some files inside the app are missing",
+        "Скачай Scorpena заново: все файлы встанут на место, настройки и история сохранятся.": "Download Scorpena again: everything will be put back in place, and your settings and history are kept.",
+        "Открыть страницу загрузки": "Open the download page",
         "Скачивания платного и защищённого видео (Netflix, Кинопоиск, ivi, Okko и т.д.): оно закрыто DRM, системой шифрования от копирования.": "Downloading paid and protected video (Netflix, Kinopoisk, ivi, Okko, etc.): it is locked with DRM, an encryption system against copying.",
         "Записи идущих прямых эфиров: только уже завершённых.": "Recording live streams that are still going: only finished ones.",
         "Скачивания плейлистов.": "Downloading playlists.",
@@ -332,20 +329,10 @@ enum Translations {
             "Couldn't determine available qualities in %@ s — the download will use the best available quality.",
 
         // MARK: DownloadManager — tooling
-        "yt-dlp и ffmpeg установлены ✅": "yt-dlp and ffmpeg installed ✅",
-        "Установка yt-dlp и ffmpeg через Homebrew…": "Installing yt-dlp and ffmpeg via Homebrew…",
         "Не удалось проверить обновления.": "Couldn't check for updates.",
-        "yt-dlp обновлён ✅": "yt-dlp updated ✅",
-        "Обновление встроенного yt-dlp…": "Updating the built-in yt-dlp…",
-        "yt-dlp и ffmpeg обновлены ✅": "yt-dlp and ffmpeg updated ✅",
-        "Обновление yt-dlp и ffmpeg…": "Updating yt-dlp and ffmpeg…",
-        "Homebrew не найден. Установи его одной командой в Терминале:\n\n/bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"\n\nзатем нажми «Проверить снова».":
-            "Homebrew not found. Install it with one command in Terminal:\n\n/bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"\n\nthen click “Check again”.",
 
         // MARK: DownloadManager — download flow
         "Вставь ссылку на видео.": "Paste a video link.",
-        "yt-dlp не найден. Нажми «Установить через Homebrew» в баннере выше.": "yt-dlp not found. Click “Install via Homebrew” in the banner above.",
-        "ffmpeg не найден. Нажми «Установить через Homebrew» в баннере выше.": "ffmpeg not found. Click “Install via Homebrew” in the banner above.",
         "Скачивание сейчас начнётся…": "Download will start now…",
         "Нужен вход — пробую %@…": "Login required — trying %@…",
         "без входа": "without login",

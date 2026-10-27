@@ -2,8 +2,8 @@ import Foundation
 import Combine
 import AVFoundation
 
-/// Runs the external command-line jobs the app needs: a `yt-dlp` download, or a
-/// Homebrew install / upgrade of `yt-dlp` + `ffmpeg`. Only one job runs at a time.
+/// Runs the external command-line jobs the app needs: a `yt-dlp` download and the
+/// `ffmpeg` conversion that can follow it. Only one job runs at a time.
 final class DownloadManager: ObservableObject {
 
     enum Phase: Equatable {
@@ -18,19 +18,12 @@ final class DownloadManager: ObservableObject {
     private enum Job {
         case download
         case transcode                                   // ffmpeg → H.264
-        case tooling(label: String, successStatus: String)
 
         var label: String {
             switch self {
             case .download: return "yt-dlp"
             case .transcode: return "ffmpeg"
-            case .tooling(let label, _): return label
             }
-        }
-
-        var isTooling: Bool {
-            if case .tooling = self { return true }
-            return false
         }
     }
 
@@ -48,13 +41,12 @@ final class DownloadManager: ObservableObject {
     /// True while a download (not a conversion) is at the stage where pausing is safe.
     @Published private(set) var canPause = false
     @Published private(set) var progress: Double = 0          // 0.0 ... 1.0
-    @Published private(set) var indeterminate = false         // brew jobs have no %
+    @Published private(set) var indeterminate = false
     @Published private(set) var statusLine: String = ""
     @Published private(set) var log: String = ""
 
     @Published private(set) var ytDlpPath: String?
     @Published private(set) var ffmpegPath: String?
-    @Published private(set) var brewPath: String?
 
     @Published private(set) var isCheckingToolUpdate = false
     @Published private(set) var toolUpdateCheckStatus: String?
@@ -151,7 +143,6 @@ final class DownloadManager: ObservableObject {
     var isRunning: Bool { phase == .running }
     var isPaused: Bool { phase == .paused }
     var toolsReady: Bool { ytDlpPath != nil && ffmpegPath != nil }
-    var hasHomebrew: Bool { brewPath != nil }
 
     /// Are both tools the copies shipped inside the .app?
     var usingBundledTools: Bool {
@@ -165,7 +156,6 @@ final class DownloadManager: ObservableObject {
         let defaults = UserDefaults.standard
         ytDlpPath = ToolLocator.find("yt-dlp", userOverride: defaults.string(forKey: ytDlpKey))
         ffmpegPath = ToolLocator.find("ffmpeg", userOverride: defaults.string(forKey: ffmpegKey))
-        brewPath = ToolLocator.find("brew", userOverride: nil)
         refreshYtDlpVersion()
     }
 
@@ -328,16 +318,14 @@ final class DownloadManager: ObservableObject {
         }
     }
 
-    /// PATH for yt-dlp's child processes. With the bundled tools, Homebrew's
-    /// directories are deliberately left out: the app must work on a Mac
-    /// that has nothing installed, and a stray Homebrew deno/node on the
-    /// developer's machine would otherwise hide a missing bundled one.
+    /// PATH for yt-dlp's child processes: the tools bundled in the app, then the
+    /// system's own. Nothing else is looked at on purpose — the app must work on
+    /// a Mac that has nothing installed, and a stray deno/node on the developer's
+    /// machine would otherwise hide a missing bundled one.
     static func toolSearchPath(ytDlp: String, extraFirst: [String] = []) -> String {
         var dirs = extraFirst
         if ToolLocator.isBundled(ytDlp), let bin = ToolLocator.bundledBinDirectory {
             dirs.append(bin)
-        } else {
-            dirs += ["/opt/homebrew/bin", "/usr/local/bin"]
         }
         dirs += ["/usr/bin", "/bin"]
         return dirs.joined(separator: ":")
@@ -411,24 +399,13 @@ final class DownloadManager: ObservableObject {
         return rungs.min(by: { abs($0 - h) < abs($1 - h) }) ?? h
     }
 
-    // MARK: Tooling jobs (install / update yt-dlp + ffmpeg)
-
-    func installTools() {
-        runBrew(["install", "yt-dlp", "ffmpeg"],
-                successStatus: tr("yt-dlp и ffmpeg установлены ✅"),
-                startStatus: tr("Установка yt-dlp и ffmpeg через Homebrew…"))
-    }
+    // MARK: Updating the bundled yt-dlp
 
     /// "Проверить сейчас": checks for a newer stable yt-dlp and installs it
-    /// right away (with the same backup + self-check + rollback as the daily
-    /// automatic update). With a Homebrew yt-dlp, runs `brew upgrade` instead.
+    /// right away (with the same self-check and rollback as the daily automatic update).
     func checkAndUpdateTools() {
         guard !isRunning, !isCheckingToolUpdate else { return }
-        guard let ytDlp = ytDlpPath else { return }
-        guard ToolLocator.isBundled(ytDlp) else {
-            updateTools()
-            return
-        }
+        guard let ytDlp = ytDlpPath, ToolLocator.isBundled(ytDlp) else { return }
         isCheckingToolUpdate = true
         let start = Date()
         var shownStage = ToolAutoUpdater.Stage.checking
@@ -535,50 +512,6 @@ final class DownloadManager: ObservableObject {
         return tag
     }
 
-    func updateTools() {
-        // The bundled yt-dlp is a standalone binary that self-updates.
-        if let ytDlp = ytDlpPath, ToolLocator.isBundled(ytDlp), !isRunning {
-            var env = ProcessInfo.processInfo.environment
-            env["PATH"] = "/usr/bin:/bin"
-            run(executableURL: URL(fileURLWithPath: ytDlp),
-                arguments: ["-U"],
-                environment: env,
-                job: .tooling(label: "yt-dlp", successStatus: tr("yt-dlp обновлён ✅")),
-                startStatus: tr("Обновление встроенного yt-dlp…"))
-            return
-        }
-
-        runBrew(["upgrade", "--formula", "yt-dlp", "ffmpeg"],
-                successStatus: tr("yt-dlp и ffmpeg обновлены ✅"),
-                startStatus: tr("Обновление yt-dlp и ffmpeg…"))
-    }
-
-    private func runBrew(_ brewArgs: [String], successStatus: String, startStatus: String) {
-        guard !isRunning else { return }
-        guard let brew = brewPath else {
-            phase = .failed(tr("""
-            Homebrew не найден. Установи его одной командой в Терминале:
-
-            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-            затем нажми «Проверить снова».
-            """))
-            return
-        }
-
-        let brewDir = (brew as NSString).deletingLastPathComponent
-        var env = ProcessInfo.processInfo.environment
-        env["PATH"] = "\(brewDir):/usr/bin:/bin:/usr/sbin:/sbin"
-        env["HOMEBREW_NO_ENV_HINTS"] = "1"
-        env["HOMEBREW_NO_INSTALL_CLEANUP"] = "1"
-
-        run(executableURL: URL(fileURLWithPath: brew),
-            arguments: brewArgs,
-            environment: env,
-            job: .tooling(label: "Homebrew", successStatus: successStatus),
-            startStatus: startStatus)
-    }
-
     // MARK: Download job
 
     /// Downloads `urlString` into `destination` as an H.264 `.mp4`, doing
@@ -606,12 +539,8 @@ final class DownloadManager: ObservableObject {
             phase = .failed(tr("Вставь ссылку на видео."))
             return
         }
-        guard ytDlpPath != nil else {
-            phase = .failed(tr("yt-dlp не найден. Нажми «Установить через Homebrew» в баннере выше."))
-            return
-        }
-        guard ffmpegPath != nil else {
-            phase = .failed(tr("ffmpeg не найден. Нажми «Установить через Homebrew» в баннере выше."))
+        guard ytDlpPath != nil, ffmpegPath != nil else {
+            phase = .failed(tr("Внутри программы не хватает файлов. Скачай Scorpena заново."))
             return
         }
 
@@ -786,7 +715,7 @@ final class DownloadManager: ObservableObject {
 
         currentJob = job
         progress = 0
-        indeterminate = job.isTooling
+        indeterminate = false
         statusLine = startStatus
         if resetLog { log = "" } else { log += "\n— \(startStatus) —\n" }
         lineBuffer.removeAll(keepingCapacity: true)
@@ -878,12 +807,6 @@ final class DownloadManager: ObservableObject {
 
         if !slowFragmentedSite, line.lowercased().hasPrefix("[vimeo") {
             slowFragmentedSite = true
-        }
-
-        if currentJob.isTooling {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if !trimmed.isEmpty { statusLine = String(trimmed.prefix(120)) }
-            return
         }
 
         if case .transcode = currentJob {
@@ -1026,18 +949,11 @@ final class DownloadManager: ObservableObject {
                 }
             case .transcode:
                 finalizeTranscode(ok: true)
-            case .tooling(_, let successStatus):
-                progress = 1
-                phase = .finished
-                statusLine = successStatus
-                refreshTools()
-                toolUpdateCheckStatus = nil
             }
             return
         }
 
         // Non-zero exit.
-        if job.isTooling { refreshTools() }
 
         if case .transcode = job {
             finalizeTranscode(ok: false)

@@ -755,7 +755,7 @@ struct ContentView: View {
             .font(.caption)
 
             // A running counter under the status line — so a long, quiet
-            // wait (Homebrew install, transcode, download not yet started)
+            // wait (transcode, download not yet started)
             // still visibly shows the app is working, not stuck.
             if manager.isRunning, let start = runStartTime {
                 TimelineView(.periodic(from: start, by: 1)) { context in
@@ -841,24 +841,16 @@ struct ContentView: View {
 
     private var missingToolsBanner: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(tr("Не хватает инструментов"), systemImage: "exclamationmark.triangle")
+            Label(tr("Внутри программы не хватает файлов"), systemImage: "exclamationmark.triangle")
                 .font(.callout.bold())
-            Text(trf("yt-dlp: %@\nffmpeg: %@",
-                     manager.ytDlpPath ?? tr("не найден"),
-                     manager.ffmpegPath ?? tr("не найден")))
+            Text(tr("Скачай Scorpena заново: все файлы встанут на место, настройки и история сохранятся."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .textSelection(.enabled)
-            HStack {
-                Button(tr("Установить через Homebrew")) { manager.installTools() }
-                    .disabled(manager.isRunning || !manager.hasHomebrew)
-                Button(tr("Проверить снова")) { manager.refreshTools() }
-            }
-            if !manager.hasHomebrew {
-                Text(tr("Homebrew не найден — поставь его с brew.sh. Обычно инструменты уже вшиты в приложение при сборке."))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(tr("Открыть страницу загрузки")) {
+                if let url = URL(string: "https://github.com/erickkey/Scorpena/releases/latest") {
+                    NSWorkspace.shared.open(url)
+                }
             }
         }
         .padding(12)

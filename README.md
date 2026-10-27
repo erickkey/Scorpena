@@ -37,8 +37,9 @@ yt-dlp, чтобы решать проверки YouTube).
 - `ffmpeg` — статическая сборка ([eugeneware/ffmpeg-static](https://github.com/eugeneware/ffmpeg-static)), universal;
 - `deno` — JS-движок, который yt-dlp использует для проверок YouTube, universal.
 
-Если встроенных инструментов нет, приложение ищет `yt-dlp`/`ffmpeg` в системе
-(`/opt/homebrew/bin`, `/usr/local/bin`, …) и предлагает поставить их через Homebrew.
+Из системы ничего не берётся: приложение работает одинаково на любом Mac. Если
+файлы внутри повреждены или удалены, оно покажет плашку «Внутри программы не хватает
+файлов» и предложит скачать Scorpena заново.
 
 ### Обновления
 
@@ -169,7 +170,7 @@ yt-dlp --newline --no-color --no-playlist --ffmpeg-location <dir> \
 | `DownloadManager.swift` | запуск `yt-dlp`/`ffmpeg`, разбор прогресса, пауза, докачка, повторы |
 | `DownloadSettings.swift` | форматы видео и звука, ограничение скорости, незавершённое скачивание |
 | `DownloadHistory.swift` | история скачиваний |
-| `ToolLocator.swift` | поиск `yt-dlp` / `ffmpeg` (сначала внутри бандла, потом в системе) |
+| `ToolLocator.swift` | поиск `yt-dlp` / `ffmpeg` внутри приложения |
 | `ToolAutoUpdater.swift` | безопасное обновление встроенного yt-dlp |
 | `AppInstaller.swift`, `UpdatePanel.swift` | обновление самого приложения |
 | `AppRenamer.swift` | переименование файла при переходе со старого названия |
