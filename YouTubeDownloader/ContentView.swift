@@ -1250,14 +1250,23 @@ struct AdvancedSettingsView: View {
     }
 
     private var notificationsBlock: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 10) {
             Text(tr("Уведомления")).font(.subheadline.weight(.semibold))
-            Toggle(tr("Отключить звук уведомления о скачивании"), isOn: $muteChime)
-                .toggleStyle(.checkbox)
-                .font(.caption)
-            Toggle(tr("Отключить звук запуска приложения"), isOn: $muteLaunchSound)
-                .toggleStyle(.checkbox)
-                .font(.caption)
+            // "on" = the sound plays (the stored flags say "muted", so they are inverted here)
+            switchRow(tr("Звук уведомления о скачивании"), isOn: Binding(get: { !muteChime }, set: { muteChime = !$0 }))
+            switchRow(tr("Звук запуска приложения"), isOn: Binding(get: { !muteLaunchSound }, set: { muteLaunchSound = !$0 }))
+        }
+    }
+
+    /// A label on the left and an on/off switch on the right (green when on).
+    private func switchRow(_ title: String, isOn: Binding<Bool>) -> some View {
+        HStack {
+            Text(title).font(.callout)
+            Spacer(minLength: 12)
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .tint(.green)
         }
     }
 

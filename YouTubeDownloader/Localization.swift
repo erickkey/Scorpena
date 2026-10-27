@@ -146,8 +146,6 @@ enum Translations {
         // MARK: Advanced settings window
         "Закрыть": "Close",
         "Уведомления": "Notifications",
-        "Отключить звук уведомления о скачивании": "Mute the download-complete sound",
-        "Отключить звук запуска приложения": "Mute the app launch sound",
         "Обновление встроенных инструментов": "Built-in tools update",
         "Обновить": "Update",
         "Язык": "Language",
@@ -226,6 +224,8 @@ enum Translations {
         "Распаковываю новую версию рядом со старой…": "Unpacking the new version next to the old one…",
         "Проверяю, что новая версия работает с YouTube, и только потом заменяю…": "Checking that the new version works with YouTube, and only then replacing…",
         "Без ограничения": "No limit",
+        "Звук уведомления о скачивании": "Download notification sound",
+        "Звук запуска приложения": "App launch sound",
         "Конвертация в %@…": "Converting to %@…",
         "Качество:": "Quality:",
         "Вставь ссылку на видео": "Paste a video link",
