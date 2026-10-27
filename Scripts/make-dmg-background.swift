@@ -72,7 +72,6 @@ func plate(centreX: CGFloat, centreY: CGFloat, width: CGFloat) {
 }
 plate(centreX: 150, centreY: iconY - 62, width: 112)
 plate(centreX: 490, centreY: iconY - 62, width: 112)
-plate(centreX: 545, centreY: 26, width: 148)
 
 // dotted arrow: "drag this onto that"
 ctx.setStrokeColor(white(0.5))
@@ -91,11 +90,11 @@ ctx.addLine(to: CGPoint(x: 374, y: iconY))
 ctx.addLine(to: CGPoint(x: 356, y: iconY - 15))
 ctx.strokePath()
 
-// install hint + first-launch tip (bottom, left of the help file)
-text("Перетащи Scorpena в «Программы»", size: 14, weight: .semibold, alpha: 0.96, y: 82, x: 40, width: 430)
-text("Первый запуск: правый клик по значку → «Открыть»", size: 11, weight: .medium, alpha: 0.58, y: 60, x: 40, width: 430)
-text("Drag Scorpena to the Applications folder", size: 11, weight: .regular, alpha: 0.34, y: 40, x: 40, width: 430)
-text("by Yaroslav Lukyanov", size: 10, weight: .regular, alpha: 0.26, y: 22, x: 40, width: 430)
+// install hint + help (bottom, centred)
+text("Перетащи Scorpena в «Программы»", size: 15, weight: .semibold, alpha: 0.96, y: 88, x: 40, width: CGFloat(W) - 80)
+text("Не открывается? Правый клик по значку → «Открыть»", size: 11, weight: .medium, alpha: 0.58, y: 62, x: 40, width: CGFloat(W) - 80)
+text("Если не помогло: Системные настройки → Конфиденциальность и безопасность → «Всё равно открыть»", size: 10, weight: .regular, alpha: 0.4, y: 44, x: 40, width: CGFloat(W) - 80)
+text("by Yaroslav Lukyanov", size: 10, weight: .regular, alpha: 0.26, y: 24, x: 40, width: CGFloat(W) - 80)
 
 NSGraphicsContext.restoreGraphicsState()
 
