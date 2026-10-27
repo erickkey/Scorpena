@@ -104,3 +104,70 @@ struct AlwaysVisibleScroller: NSViewRepresentable {
         }
     }
 }
+
+/// Lays its children out left to right like words, wrapping onto the next line.
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 3
+    var lineSpacing: CGFloat = 2
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var x: CGFloat = 0, y: CGFloat = 0, lineHeight: CGFloat = 0, widest: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > maxWidth {
+                x = 0
+                y += lineHeight + lineSpacing
+                lineHeight = 0
+            }
+            x += size.width + spacing
+            widest = max(widest, x - spacing)
+            lineHeight = max(lineHeight, size.height)
+        }
+        return CGSize(width: widest, height: y + lineHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX, y = bounds.minY, lineHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > bounds.minX, x + size.width > bounds.maxX {
+                x = bounds.minX
+                y += lineHeight + lineSpacing
+                lineHeight = 0
+            }
+            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+            x += size.width + spacing
+            lineHeight = max(lineHeight, size.height)
+        }
+    }
+}
+
+/// A paragraph in which a "⚙" is the real gear button of the toolbar: it looks the
+/// same and opens the same «Дополнительно» window.
+struct TextWithGear: View {
+    let text: String
+    let action: () -> Void
+
+    var body: some View {
+        FlowLayout {
+            ForEach(Array(text.split(separator: " ").enumerated()), id: \.offset) { _, word in
+                if word.contains("⚙") {
+                    let parts = word.components(separatedBy: "⚙")
+                    HStack(spacing: 0) {
+                        Text(parts.first ?? "")
+                        Button(action: action) {
+                            Image(systemName: "gearshape")
+                                .foregroundColor(.accentColor)
+                        }
+                        .buttonStyle(.plain)
+                        .help(tr("Дополнительно"))
+                        Text(parts.count > 1 ? parts[1] : "")
+                    }
+                } else {
+                    Text(String(word))
+                }
+            }
+        }
+    }
+}

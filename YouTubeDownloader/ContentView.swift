@@ -196,6 +196,7 @@ struct ContentView: View {
             if qualityHeight != 0, !manager.availableHeights.contains(qualityHeight) {
                 qualityHeight = 0
             }
+            AdvancedSettingsPanel.shared.manager = manager
             manager.refreshTools()
             manager.autoUpdateToolsIfDue()
             if appearance == "auto" {
@@ -1195,8 +1196,15 @@ final class InfoPanel {
 final class AdvancedSettingsPanel {
     static let shared = AdvancedSettingsPanel()
     private var window: NSWindow?
+    /// Set by the main window, so other windows («О программе») can open this one too.
+    weak var manager: DownloadManager?
+
+    func show() {
+        if let manager { show(manager: manager) }
+    }
 
     func show(manager: DownloadManager) {
+        self.manager = manager
         NSApp.activate(ignoringOtherApps: true)
         if let window {
             window.title = tr("Дополнительно")
@@ -1670,7 +1678,8 @@ struct AboutView: View {
     var body: some View {
         InfoScaffold(width: 480, height: 600, closeTitle: tr("Благодарю"), onClose: onClose) {
             VStack(alignment: .leading, spacing: 14) {
-                Text(tr("Если видео перестало скачиваться — нажми «Проверить сейчас» в разделе «Дополнительно». Сайты периодически меняют защиту, обновление её догоняет."))
+                TextWithGear(text: tr("Сайты периодически меняют защиту. Если видео перестало скачиваться, зайди в раздел «Дополнительно» (⚙) и проверь обновления встроенных инструментов."),
+                             action: { AdvancedSettingsPanel.shared.show() })
                     .font(.callout)
                     .padding(14)
                     .frame(maxWidth: .infinity, alignment: .leading)

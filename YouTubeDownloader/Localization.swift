@@ -266,8 +266,8 @@ enum Translations {
         "Мелкие внутренние улучшения и исправления.": "Minor internal improvements and fixes.",
 
         // MARK: About window
-        "Если видео перестало скачиваться — нажми «Проверить сейчас» в разделе «Дополнительно». Сайты периодически меняют защиту, обновление её догоняет.":
-            "If videos stop downloading, click “Check now” in the “Advanced” section. Sites periodically change their protection, and an update catches up with it.",
+        "Сайты периодически меняют защиту. Если видео перестало скачиваться, зайди в раздел «Дополнительно» (⚙) и проверь обновления встроенных инструментов.":
+            "Sites change their protection from time to time. If a video stops downloading, open “Advanced” (⚙) and check for updates to the built-in tools.",
         "Скопируй ссылку и нажми «Скачать»": "Copy the link and hit “Download”",
         "Нативное приложение для Mac — скачивает видео и аудио с YouTube, VK, Instagram, TikTok, Vimeo и ещё ~1750 сайтов одним кликом. Видео — в MP4, MOV, WebM или MKV, звук — в MP3, WAV или M4A: формат выбирается рядом с кнопками скачивания.":
             "A native Mac app — downloads video and audio from YouTube, VK, Instagram, TikTok, Vimeo, and ~1750 other sites in one click. Video as MP4, MOV, WebM or MKV, audio as MP3, WAV or M4A: pick the format next to the download buttons.",
