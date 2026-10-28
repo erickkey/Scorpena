@@ -547,6 +547,8 @@ struct ContentView: View {
             Button(tr("Поделиться")) { ShareHelper.shared.share(from: shareAnchorView) }
                 .buttonStyle(.link)
                 .background(ViewAnchor { shareAnchorView = $0 })
+            Button(tr("Поддержать")) { DonateLink.open() }
+                .buttonStyle(.link)
         }
     }
 
@@ -1358,7 +1360,7 @@ final class ShareHelper: NSObject, NSSharingServicePickerDelegate {
     private var picker: NSSharingServicePicker?
 
     private static let message = """
-    Нашёл удобную программу для Mac — скачивает видео/аудио с YouTube, VK, Instagram, TikTok и ещё кучи сайтов в один клик. Вот ссылка на актуальную версию: https://github.com/erickkey/Scorpena/releases/latest
+    Нашёл удобную программу для Mac — SCORPENA – video downloader. Она скачивает видео/аудио с YouTube, VK, Instagram, TikTok и ещё кучи сайтов в один клик. Вот ссылка на актуальную версию: https://github.com/erickkey/Scorpena/releases/latest/download/Scorpena.dmg
     """
 
     /// Titles of default services that don't make sense for a short "tell a
@@ -1667,6 +1669,12 @@ func infoSection(_ title: String, _ items: [String]) -> some View {
     .card()
 }
 
+/// Где можно поддержать автора (CloudTips). Открывается в браузере, программа ничего не передаёт.
+enum DonateLink {
+    static let url = URL(string: "https://pay.cloudtips.ru/p/491e7ef9")!
+    static func open() { NSWorkspace.shared.open(url) }
+}
+
 struct AboutView: View {
     var onClose: () -> Void
 
@@ -1719,6 +1727,13 @@ struct AboutView: View {
                     "Скачивания плейлистов.",
                 ].map(tr))
 
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(tr("Программа бесплатная. Если она тебе пригодилась, можно поддержать её развитие."))
+                        .foregroundStyle(.secondary)
+                    Button(tr("Поддержать")) { DonateLink.open() }
+                        .buttonStyle(SoftPillStyle())
+                }
+                .padding(.top, 4)
             }
         }
     }

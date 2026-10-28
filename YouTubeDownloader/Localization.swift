@@ -73,6 +73,8 @@ enum Translations {
         "Правовая информация": "Legal Information",
         "Обратная связь": "Feedback",
         "Поделиться": "Share",
+        "Поддержать": "Support",
+        "Программа бесплатная. Если она тебе пригодилась, можно поддержать её развитие.": "The app is free. If you find it useful, you can support its development.",
         "Доступно обновление": "Update available",
 
         // MARK: URL field
