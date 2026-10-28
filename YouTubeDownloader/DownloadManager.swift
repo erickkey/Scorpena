@@ -246,8 +246,15 @@ final class DownloadManager: ObservableObject {
     // MARK: Quality probe
 
     /// Clears a previous probe result (call when the URL changes).
+    /// True while the status line still shows the outcome of a quality check.
+    private var statusIsProbeResult = false
+
     func resetProbe() {
         guard !isProbing else { return }
+        if statusIsProbeResult && !isRunning {
+            statusLine = ""
+            statusIsProbeResult = false
+        }
         if probedTitle != nil || !availableHeights.isEmpty {
             probedTitle = nil
             availableHeights = []
@@ -311,8 +318,10 @@ final class DownloadManager: ObservableObject {
                     self.approxSizeByHeight = sizes
                     self.approxAudioBytes = duration.map { Int64($0 * 40_000) }   // 320 kbps ≈ 40 KB/s
                     self.statusLine = trf("Доступно (%@ с): ", elapsed) + heights.map { "\($0)p" }.joined(separator: ", ")
+                    self.statusIsProbeResult = true
                 } else {
                     self.statusLine = trf("Не удалось определить качества за %@ с — при скачивании возьмётся максимум доступное.", elapsed)
+                    self.statusIsProbeResult = true
                 }
             }
         }
@@ -717,6 +726,7 @@ final class DownloadManager: ObservableObject {
         progress = 0
         indeterminate = false
         statusLine = startStatus
+        statusIsProbeResult = false
         if resetLog { log = "" } else { log += "\n— \(startStatus) —\n" }
         lineBuffer.removeAll(keepingCapacity: true)
         phase = .running
