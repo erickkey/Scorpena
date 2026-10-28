@@ -442,9 +442,7 @@ struct ContentView: View {
     ]
 
     /// A call to action shown under the list, highlighted so it isn't missed.
-    static let changelogCallouts: [String: String] = [
-        "3.0": "Добавь приложение в Dock и погнали качать!",
-    ]
+    static let changelogCallouts: [String: String] = [:]
 
     static let changelog: [String: [String]] = [
         "3.0": [
