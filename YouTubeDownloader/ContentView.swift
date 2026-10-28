@@ -189,7 +189,6 @@ struct ContentView: View {
         }
         .background(WindowAccessor { windowFitter.window = $0 })
         .frame(minWidth: 560, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .overlay(alignment: .bottomTrailing) { ResizeGripView() }
         .onAppear {
             // A specific resolution picked in a past probe (persisted across
             // launches) has no matching option until this video is probed
@@ -1069,25 +1068,6 @@ private struct FormatSegments: View {
             .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.08)))
         }
         .opacity(disabled ? 0.45 : 1)
-    }
-}
-
-/// A faint diagonal-line hint in the corner so the window doesn't look
-/// like a fixed-size dialog — visible on close inspection, not distracting.
-private struct ResizeGripView: View {
-    var body: some View {
-        Canvas { context, size in
-            let color = Color.secondary.opacity(0.4)
-            for i in 0..<3 {
-                let d = CGFloat(i) * 6 + 4
-                var path = Path()
-                path.move(to: CGPoint(x: size.width - d, y: size.height - 3))
-                path.addLine(to: CGPoint(x: size.width - 3, y: size.height - d))
-                context.stroke(path, with: .color(color), lineWidth: 1.5)
-            }
-        }
-        .frame(width: 20, height: 20)
-        .allowsHitTesting(false)
     }
 }
 
