@@ -8,6 +8,8 @@ struct ContentView: View {
     @StateObject private var updateChecker = UpdateChecker()
     @StateObject private var windowFitter = MainWindowFitter()
     @State private var updateGlow = false
+    @State private var showAccessHint = false
+    @AppStorage("accessHintShown") private var accessHintShown = false
     @State private var hoveringVersion = false
     @State private var launchSoundPlayer: AVAudioPlayer?
     @State private var shareAnchorView: NSView?
@@ -233,7 +235,7 @@ struct ContentView: View {
             .frame(maxWidth: 560)
             progressSection
                 .frame(maxWidth: 560)
-            if manager.needsFullDiskAccess { fullDiskAccessBanner }
+            if manager.needsFullDiskAccess || showAccessHint { fullDiskAccessBanner }
             if !manager.toolsReady { missingToolsBanner }
             footer
         }
@@ -588,7 +590,10 @@ struct ContentView: View {
                     .font(.title3)
                     .disableAutocorrection(true)
                     .onSubmit { if canDownload { startDownload(audioOnly: downloadMode == "audio") } }
-                    .onChange(of: urlString) { _ in manager.resetProbe() }
+                    .onChange(of: urlString) { _ in
+                        manager.resetProbe()
+                        showAccessHint = false
+                    }
                 Button {
                     startDownload(audioOnly: downloadMode == "audio")
                 } label: {
@@ -820,9 +825,9 @@ struct ContentView: View {
 
     private var fullDiskAccessBanner: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(tr("Нужен «Полный доступ к диску»"), systemImage: "lock.shield")
+            Label(tr("Нужен доступ к диску"), systemImage: "lock.shield")
                 .font(.callout.bold())
-            Text(tr("Чтобы взять cookies из Safari для видео, требующих входа, включи для Scorpena «Полный доступ к диску» в настройках. Один раз. Нет Scorpena в списке? Нажми «+» и добавь её из папки, куда ты её установил."))
+            Text(tr("Чтобы программа могла показать сайту, что ты не робот, используя куки."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -864,6 +869,10 @@ struct ContentView: View {
 
     private func startDownload(audioOnly: Bool) {
         errorReportStatus = .idle
+        if !accessHintShown && !DownloadManager.hasDiskAccess {
+            accessHintShown = true
+            showAccessHint = true
+        }
         // Before a probe, the UI only shows "Максимально доступное" — honor
         // that rather than a stale specific height picked in a past probe.
         let effectiveMaxHeight = manager.availableHeights.isEmpty ? nil : (qualityHeight == 0 ? nil : qualityHeight)

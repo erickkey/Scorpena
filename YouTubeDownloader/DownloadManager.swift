@@ -249,11 +249,19 @@ final class DownloadManager: ObservableObject {
     /// True while the status line still shows the outcome of a quality check.
     private var statusIsProbeResult = false
 
+    /// Whether the app can read folders macOS keeps behind "Full Disk Access"
+    /// (Safari's data lives there) — needed to borrow browser cookies.
+    static var hasDiskAccess: Bool {
+        let safari = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Safari")
+        return (try? FileManager.default.contentsOfDirectory(atPath: safari.path)) != nil
+    }
+
     func resetProbe() {
         guard !isProbing else { return }
         if statusIsProbeResult && !isRunning {
             statusLine = ""
             statusIsProbeResult = false
+            needsFullDiskAccess = false
         }
         if probedTitle != nil || !availableHeights.isEmpty {
             probedTitle = nil
@@ -321,6 +329,7 @@ final class DownloadManager: ObservableObject {
                     self.statusIsProbeResult = true
                 } else {
                     self.statusLine = trf("Не удалось определить качества за %@ с — при скачивании возьмётся максимум доступное.", elapsed)
+                    self.needsFullDiskAccess = !Self.hasDiskAccess
                     self.statusIsProbeResult = true
                 }
             }

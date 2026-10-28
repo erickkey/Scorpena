@@ -133,9 +133,7 @@ enum Translations {
         "Не удалось отправить — текст скопирован, отправь вручную в Telegram": "Couldn't send it — the text was copied, send it manually via Telegram",
 
         // MARK: Banners
-        "Нужен «Полный доступ к диску»": "“Full Disk Access” needed",
-        "Чтобы взять cookies из Safari для видео, требующих входа, включи для Scorpena «Полный доступ к диску» в настройках. Один раз. Нет Scorpena в списке? Нажми «+» и добавь её из папки, куда ты её установил.":
-            "To grab cookies from Safari for videos that need a login, turn on “Full Disk Access” for Scorpena in Settings. Once. Scorpena isn't in the list? Click “+” and add it from the folder you installed it in.",
+        "Чтобы программа могла показать сайту, что ты не робот, используя куки.": "So the app can show the site that you’re not a robot, using cookies.",
         "Открыть настройки": "Open Settings",
 
         // MARK: Advanced settings window
