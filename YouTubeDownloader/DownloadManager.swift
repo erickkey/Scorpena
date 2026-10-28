@@ -838,7 +838,6 @@ final class DownloadManager: ObservableObject {
             progress = min(percent / 100, 1)
             if line.contains("(frag ") { fragmentedDownload = true }
             var s = (pendingAudioOnly ? tr("Скачивание аудио… ") : tr("Скачивание… ")) + "\(Int(percent))%"
-            if let eta = Self.parseETA(line) { s += trf(" · осталось %@", eta) }
             if let speed = Self.parseSpeed(line) { s += " · \(speed)" }
             statusLine = s
         } else if line.contains("[ExtractAudio]") {

@@ -342,7 +342,6 @@ enum Translations {
         "Перекодирование в H.264… %d%%": "Transcoding to H.264… %d%%",
         "Скачивание аудио… ": "Downloading audio… ",
         "Скачивание… ": "Downloading… ",
-        " · осталось %@": " · %@ left",
         "Объединение видео и звука…": "Merging video and audio…",
         "Упаковка в MP4…": "Packaging into MP4…",
         "Скачивание аудио…": "Downloading audio…",
