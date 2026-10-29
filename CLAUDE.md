@@ -10,7 +10,7 @@ it corrupts the file — that's why README warns about it).
 
 - The app was renamed **VideoDownloader → Scorpena ("Scorpena – video downloader")**;
   the GitHub repo is now `erickkey/Scorpena` (old URLs redirect).
-- **Version 3.1 is the current one (2026-10-29):** parallel downloads with a queue
+- **Version 3.1.1 is the current one (3.1 + a clearer «no internet / turn off VPN» download error; its «Что нового» is the 3.1 list with that fix first). 3.1 was published 2026-10-29:** parallel downloads with a queue
   (`DownloadQueue.swift`, saved in `queue.json`, pauses included), playlists (`Playlist.swift`),
   the merged «Загрузки» window (queue + history by day), cleanup reminder (`Cleanup.swift`),
   quit warning (`QuitWarning.swift`), first-launch browser-login preflight (`CookiePreflight.swift`),

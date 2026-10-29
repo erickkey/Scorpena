@@ -270,6 +270,7 @@ enum Translations {
         "Появилась возможность паузы и докачки видео даже после закрытия программы.": "You can now pause and resume downloads, even after closing the app.",
         "Ограничение скорости скачивания. (нажми на шестеренку справа вверху)": "Download speed limit. (click the gear at the top right)",
         "Скачивание и проверка качества стали гораздо быстрее.": "Downloading and the quality check are now much faster.",
+        "Исправлена ошибка при скачивании, когда мешает VPN или нет интернета.": "Fixed a download error when a VPN gets in the way or there is no internet.",
         "Множество мелких улучшений и исправлений.": "Lots of small improvements and fixes.",
         "Обновление программы теперь одной кнопкой (наконец-то).": "Updating the app is now one button (finally).",
         "Встроенный загрузчик обновляется сам.": "The built-in downloader updates itself.",
@@ -440,7 +441,7 @@ enum Translations {
             "No format found for the selected quality — try “Best”.",
         "YouTube отклонил загрузку (403). Открой «Дополнительно» → «Проверить сейчас», затем повтори. Или попробуй другую ссылку.":
             "YouTube rejected the download (403). Open “Advanced” → “Check now”, then try again. Or try a different link.",
-        "Нет соединения с интернетом.": "No internet connection.",
+        "Нет соединения с интернетом. Если включён VPN, попробуй его выключить.": "No internet connection. If a VPN is on, try turning it off.",
 
         // MARK: formatBytes
         "%.2f ГБ": "%.2f GB",

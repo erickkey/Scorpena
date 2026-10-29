@@ -1441,8 +1441,10 @@ final class DownloadManager: ObservableObject {
         if l.contains("unable to download") && (l.contains("http error 403") || l.contains("403 forbidden")) {
             return tr("YouTube отклонил загрузку (403). Открой «Дополнительно» → «Проверить сейчас», затем повтори. Или попробуй другую ссылку.")
         }
-        if l.contains("unable to resolve host") || l.contains("network is unreachable") || l.contains("connection refused") {
-            return tr("Нет соединения с интернетом.")
+        if l.contains("unable to resolve host") || l.contains("could not resolve host") || l.contains("could not contact dns")
+            || l.contains("network is unreachable") || l.contains("connection refused")
+            || l.contains("nodename nor servname") || l.contains("internet connection appears to be offline") {
+            return tr("Нет соединения с интернетом. Если включён VPN, попробуй его выключить.")
         }
         return nil
     }
