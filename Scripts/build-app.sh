@@ -20,7 +20,7 @@ DENO_TAG="v2.9.8"   # JS engine yt-dlp needs to solve YouTube challenges
 
 # Bump this for every release that should trigger the in-app "update available"
 # notice (must match the "version" in version.json on GitHub).
-APP_VERSION="3.0"
+APP_VERSION="3.1"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/bin"
@@ -81,6 +81,11 @@ fi
 
 echo "==> resources"
 cp "$SRC/DownloadComplete.mp3" "$APP/Contents/Resources/"
+cp "$SRC/DownloadCompleteMale.mp3" "$APP/Contents/Resources/"
+cp "$SRC/DownloadCompleteEN.mp3" "$APP/Contents/Resources/"
+cp "$SRC/DownloadCompleteMaleEN.mp3" "$APP/Contents/Resources/"
+cp "$SRC/CardPlaceholder.png" "$APP/Contents/Resources/"
+cp "$SRC/HistoryPlaceholder.png" "$APP/Contents/Resources/"
 cp "$SRC/AppLaunch.mp3" "$APP/Contents/Resources/"
 
 echo "==> bundling yt-dlp (folder build, starts in <1 s) + universal ffmpeg (~110 MB download)"

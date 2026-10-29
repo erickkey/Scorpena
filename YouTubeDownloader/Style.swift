@@ -12,9 +12,9 @@ struct PrimaryPillStyle: ButtonStyle {
         configuration.label
             .fontWeight(.medium)
             .foregroundColor(isEnabled ? Color(nsColor: .windowBackgroundColor) : Color.secondary)
-            .padding(.horizontal, 22)
-            .padding(.vertical, 9)
-            .background(RoundedRectangle(cornerRadius: 9)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 8)
+            .background(RoundedRectangle(cornerRadius: 8)
                 .fill(isEnabled ? Color.primary : Color.primary.opacity(0.1)))
             .opacity(configuration.isPressed ? 0.8 : 1)
     }
@@ -22,17 +22,125 @@ struct PrimaryPillStyle: ButtonStyle {
 
 /// Everything else: a pale pill with normal text.
 struct SoftPillStyle: ButtonStyle {
+    /// Half size, for secondary buttons inside settings cards.
+    var compact = false
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            .font(compact ? .caption : .body)
             .fontWeight(.medium)
             .foregroundColor(isEnabled ? Color.primary : Color.secondary)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 9)
-            .background(RoundedRectangle(cornerRadius: 9).fill(Color.primary.opacity(isEnabled ? 0.09 : 0.05)))
+            .padding(.horizontal, compact ? 10 : 18)
+            .padding(.vertical, compact ? 5 : 8)
+            .background(RoundedRectangle(cornerRadius: compact ? 7 : 8).fill(Color.primary.opacity(isEnabled ? 0.09 : 0.05)))
             .opacity(configuration.isPressed ? 0.7 : 1)
     }
+}
+
+/// A row of choices in one pale pill; the picked one is raised (same look as the format choice on the main window).
+struct PillSegments: View {
+    let options: [(id: String, label: String)]
+    let selected: String
+    let onPick: (String) -> Void
+
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(options, id: \.id) { option in
+                let isOn = option.id == selected
+                Text(option.label)
+                    .font(.caption)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .foregroundStyle(isOn ? Color.primary : Color.secondary)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(isOn ? Color.primary.opacity(0.14) : Color.clear))
+                    .contentShape(Rectangle())
+                    .onTapGesture { if isEnabled { onPick(option.id) } }
+            }
+        }
+        .padding(2)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.08)))
+        .opacity(isEnabled ? 1 : 0.45)
+    }
+}
+
+/// A button of a question window: same width for all of them, dark when it is the main answer.
+struct DialogButton: View {
+    let title: String
+    var primary = false
+    let action: () -> Void
+
+    var body: some View {
+        Group {
+            if primary {
+                Button(action: action) { label }
+                    .buttonStyle(PrimaryPillStyle())
+                    .keyboardShortcut(.defaultAction)
+            } else {
+                Button(action: action) { label }
+                    .buttonStyle(SoftPillStyle())
+            }
+        }
+    }
+
+    private var label: some View {
+        Text(title).lineLimit(1).frame(minWidth: 96)
+    }
+}
+
+/// The one layout of every question window: icon, title, text and the buttons, all centred.
+struct DialogLayout<Extra: View, Buttons: View>: View {
+    let title: String
+    var message: String = ""
+    var width: CGFloat = 440
+    @ViewBuilder var extra: Extra
+    @ViewBuilder var buttons: Buttons
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .frame(width: 56, height: 56)
+            Text(title)
+                .font(.title3.bold())
+                .multilineTextAlignment(.center)
+            if !message.isEmpty {
+                Text(message)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            extra
+            HStack(spacing: 10) { buttons }
+                .padding(.top, 8)
+        }
+        .padding(EdgeInsets(top: 24, leading: 28, bottom: 22, trailing: 28))
+        .frame(width: width)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+extension DialogLayout where Extra == EmptyView {
+    init(title: String, message: String = "", width: CGFloat = 440, @ViewBuilder buttons: () -> Buttons) {
+        self.init(title: title, message: message, width: width, extra: { EmptyView() }, buttons: buttons)
+    }
+}
+
+/// Puts a question window on screen at the size its content needs.
+func makeDialogWindow<Content: View>(_ content: Content, closable: Bool = true) -> NSWindow {
+    let hosting = NSHostingController(rootView: content)
+    let win = NSWindow(contentViewController: hosting)
+    win.styleMask = closable ? [.titled, .closable] : [.titled]
+    win.title = "Scorpena – video downloader"
+    win.isReleasedWhenClosed = false
+    win.isRestorable = false
+    hosting.view.layoutSubtreeIfNeeded()
+    win.setContentSize(hosting.view.fittingSize)
+    win.centerExactlyOnScreen()
+    return win
 }
 
 extension View {

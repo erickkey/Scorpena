@@ -27,6 +27,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 25) { DiagnosticReporter.checkBundledTools() }
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard QuitWarningPanel.shared.needsWarning else { return .terminateNow }
+        QuitWarningPanel.shared.ask { quit in
+            NSApp.reply(toApplicationShouldTerminate: quit)
+        }
+        return .terminateLater
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         DownloadHistory.shared.prune()
     }

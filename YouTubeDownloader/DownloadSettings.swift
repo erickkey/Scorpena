@@ -107,9 +107,9 @@ enum SpeedLimit {
         return trf("≈ %@ МБ/с", text)
     }
 
-    /// yt-dlp wants bytes per second.
-    static func ytDlpArgs(_ mbit: Int) -> [String] {
-        mbit > 0 ? ["--limit-rate", "\(mbit * 125_000)"] : []
+    /// yt-dlp wants bytes per second; the limit comes in kilobits per second.
+    static func ytDlpArgs(kbit: Int) -> [String] {
+        kbit > 0 ? ["--limit-rate", "\(kbit * 125)"] : []
     }
 }
 
@@ -148,4 +148,34 @@ struct UnfinishedDownload: Codable, Equatable {
         if let name, !name.isEmpty { return name }
         return URL(string: url)?.host ?? url
     }
+}
+
+/// Whose voice says "download complete".
+enum ChimeVoice: String, CaseIterable, Identifiable {
+    case female, male
+
+    static let key = "chimeVoice"
+    var id: String { rawValue }
+
+    static var current: ChimeVoice {
+        ChimeVoice(rawValue: UserDefaults.standard.string(forKey: key) ?? "") ?? .female
+    }
+
+    var title: String {
+        switch self {
+        case .female: return tr("Женский")
+        case .male:   return tr("Мужской")
+        }
+    }
+
+    /// Russian recordings in the Russian interface, English ones in the English one.
+    var resourceName: String {
+        let suffix = LanguageSettings.shared.language == .en ? "EN" : ""
+        switch self {
+        case .female: return "DownloadComplete" + suffix
+        case .male:   return "DownloadCompleteMale" + suffix
+        }
+    }
+
+    var soundURL: URL? { Bundle.main.url(forResource: resourceName, withExtension: "mp3") }
 }

@@ -5,10 +5,12 @@ import AVFoundation
 struct ContentView: View {
 
     @StateObject private var manager = DownloadManager()
+    @ObservedObject private var queue = DownloadQueue.shared
     @StateObject private var updateChecker = UpdateChecker()
     @StateObject private var windowFitter = MainWindowFitter()
     @State private var updateGlow = false
     @State private var showAccessHint = false
+    @State private var playlistStatus: String?
     @AppStorage("accessHintShown") private var accessHintShown = false
     @State private var hoveringVersion = false
     @State private var launchSoundPlayer: AVAudioPlayer?
@@ -32,11 +34,15 @@ struct ContentView: View {
 
     @State private var urlString = ""
     @State private var lastSeenPasteboardChange = -1
+    /// Clipboard state when a link went into the queue — that same link must
+    /// not be pasted back into the freshly emptied field.
+    @State private var clipboardChangeAtQueue = -1
     enum ErrorReportStatus: Equatable { case idle, sending, sent, failed }
     @State private var errorReportStatus: ErrorReportStatus = .idle
     @State private var lastErrorReportNumber: Int?
     @AppStorage("errorReportCounter") private var errorReportCounter = 0
     @State private var runStartTime: Date?
+    @State private var batchStartTime: Date?
 
     // 0 = «Максимальное»; otherwise a height in px.
     @AppStorage("qualityHeight") private var qualityHeight = 0
@@ -109,7 +115,7 @@ struct ContentView: View {
               let host = url.host, host.contains("."), !host.contains("_"),
               let tld = host.split(separator: ".").last.map(String.init),
               tld.count >= 2, tld.allSatisfy({ $0.isLetter }),
-              !nonDomainExtensions.contains(url.pathExtension.lowercased())
+              !nonDomainExtensions.contains(tld.lowercased())
         else { return nil }
         return url
     }
@@ -144,8 +150,6 @@ struct ContentView: View {
         isPlausibleURL
         && updateChecker.installState == .idle
         && manager.toolsReady
-        && !manager.isRunning
-        && !manager.isPaused
         && !manager.isProbing
     }
 
@@ -168,11 +172,22 @@ struct ContentView: View {
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button {
-                    HistoryPanel.shared.show { picked in urlString = picked }
+                    DownloadsPanel.shared.show(manager: manager) { picked in urlString = picked }
                 } label: {
-                    Image(systemName: "clock.arrow.circlepath")
+                    Image(systemName: "list.bullet")
+                        .overlay(alignment: .topTrailing) {
+                            let count = queue.items.count + queue.busyCount
+                            if count > 0 {
+                                Text("\(count)")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 4)
+                                    .background(Capsule().fill(Color.red))
+                                    .offset(x: 8, y: -6)
+                            }
+                        }
                 }
-                .help(tr("История скачиваний"))
+                .help(tr("Загрузки"))
                 Button {
                     AdvancedSettingsPanel.shared.show(manager: manager)
                 } label: {
@@ -198,6 +213,9 @@ struct ContentView: View {
                 qualityHeight = 0
             }
             AdvancedSettingsPanel.shared.manager = manager
+            queue.attach(manager)
+            if queue.batchActive { batchStartTime = Date() }
+            Cleanup.checkOnLaunch(queue: queue)
             manager.refreshTools()
             manager.autoUpdateToolsIfDue()
             if appearance == "auto" {
@@ -217,9 +235,16 @@ struct ContentView: View {
             updateChecker.check()
         }
         .onChange(of: manager.progress) { _ in updateDockProgress() }
+        .onChange(of: queue.batchDone) { _ in updateDockProgress() }
+        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
+            if queue.batchActive { updateDockProgress() }
+        }
         .onChange(of: manager.isRunning) { running in
             updateDockProgress()
             runStartTime = running ? Date() : nil
+        }
+        .onChange(of: queue.batchActive) { active in
+            batchStartTime = active ? (batchStartTime ?? Date()) : nil
         }
     }
 
@@ -334,7 +359,10 @@ struct ContentView: View {
 
     /// Draws a thin progress bar over the app's Dock icon while a download runs.
     private func updateDockProgress() {
-        if manager.isRunning {
+        if queue.batchActive {
+            // Several downloads: the bar shows the whole list, not the one on the main window.
+            NSApp.dockTile.contentView = DockProgressView(progress: queue.batchFraction())
+        } else if manager.isRunning {
             NSApp.dockTile.contentView = DockProgressView(progress: manager.progress)
         } else {
             NSApp.dockTile.contentView = nil
@@ -378,6 +406,11 @@ struct ContentView: View {
     private func offerUnfinishedDownload() {
         guard !manager.isRunning, !manager.isPaused, manager.toolsReady,
               let saved = UnfinishedDownload.saved else { return }
+        // The queue brought it back by itself — nothing to ask.
+        if DownloadQueue.shared.restoredURLs.contains(saved.url) {
+            UnfinishedDownload.clear()
+            return
+        }
         let alert = NSAlert()
         alert.messageText = tr("Скачивание не закончилось")
         alert.informativeText = trf("Не докачано: %@. Продолжить с того места, где остановилось?", saved.displayName)
@@ -396,8 +429,8 @@ struct ContentView: View {
     /// replaces the previous one), and, as before, when the field is empty.
     /// An unchanged clipboard never overwrites what's already typed.
     private func fillURLFromClipboard() {
-        guard !manager.isRunning else { return }
         let pasteboard = NSPasteboard.general
+        guard pasteboard.changeCount != clipboardChangeAtQueue else { return }
         let clipboardIsNew = pasteboard.changeCount != lastSeenPasteboardChange
         lastSeenPasteboardChange = pasteboard.changeCount
 
@@ -437,6 +470,9 @@ struct ContentView: View {
     /// with every release that has user-visible changes.
     /// A festive heading (and a line under it) shown above the list for versions that have one.
     static let changelogHeadlines: [String: (intro: String, name: String, subtitle: String)] = [
+        "3.1": ("Встречайте! Новое название и новый дизайн!",
+                "Scorpena – video downloader",
+                "Новый облик, новые возможности, и всё работает лучше и быстрее, чем раньше."),
         "3.0": ("Встречайте! Теперь у программы есть название!",
                 "Scorpena – video downloader",
                 "Новый облик, новые возможности, и всё работает лучше, чем раньше."),
@@ -446,6 +482,18 @@ struct ContentView: View {
     static let changelogCallouts: [String: String] = [:]
 
     static let changelog: [String: [String]] = [
+        "3.1": [
+            "Можно качать несколько видео сразу.",
+            "Скачивание плейлистов.",
+            "Новое окно «Загрузки»: очередь и история в одном месте.",
+            "Очередь и пауза запоминаются при закрытии программы.",
+            "Теперь доступен выбор формата видео и звука.",
+            "Скачивание и проверка качества стали гораздо быстрее.",
+            "Ограничение скорости скачивания. (нажми на шестеренку справа вверху)",
+            "Если для видео нужен вход в аккаунт, Scorpena подскажет, что делать.",
+            "Напоминание об очистке старой истории и недокачанных файлов.",
+            "Множество мелких улучшений и исправлений.",
+        ],
         "3.0": [
             "Теперь доступен выбор формата видео и звука.",
             "Появилась возможность паузы и докачки видео даже после закрытия программы.",
@@ -633,6 +681,7 @@ struct ContentView: View {
                     .foregroundStyle(showURLWarning || showHomepageHint ? .red : showKnownSiteHint ? .green : .orange)
                     .opacity(showURLWarning || showHomepageHint || showKnownSiteHint || showUnknownSiteHint ? 1 : 0)
                     .layoutPriority(1)
+                if let playlistStatus { Text(playlistStatus).foregroundStyle(.secondary) }
                 Text(manager.probedTitle.map { "▸ \($0)" } ?? " ")
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -647,13 +696,12 @@ struct ContentView: View {
     /// One choice for the whole download: pick a video container or an audio
     /// format, and «Скачать» saves exactly that.
     private var formatRow: some View {
-        let busy = manager.isRunning || manager.isPaused
         return HStack(spacing: 20) {
             FormatSegments(title: tr("Видео"),
                            options: VideoFormat.allCases.map { ($0.rawValue, $0.title) },
                            selected: videoFormat,
                            active: downloadMode == "video",
-                           disabled: busy) { picked in
+                           disabled: false) { picked in
                 videoFormat = picked
                 downloadMode = "video"
             }
@@ -661,7 +709,7 @@ struct ContentView: View {
                            options: AudioFormat.allCases.map { ($0.rawValue, $0.title) },
                            selected: audioFormat,
                            active: downloadMode == "audio",
-                           disabled: busy) { picked in
+                           disabled: false) { picked in
                 audioFormat = picked
                 downloadMode = "audio"
             }
@@ -680,16 +728,15 @@ struct ContentView: View {
     /// Quality · folder · "no audio" in one quiet line. Downloading never
     /// requires any of it — «Скачать» works straight off the link.
     private var settingsLine: some View {
-        let busy = manager.isRunning || manager.isPaused
         return HStack(spacing: 8) {
             Toggle(tr("без звука"), isOn: $videoNoAudio)
                 .toggleStyle(.checkbox)
-                .disabled(busy || downloadMode == "audio")
+                .disabled(downloadMode == "audio")
             Text("·")
             Menu {
                 // Already checked for this link (the result is dropped when the link changes).
                 Button(tr("Проверить качество")) { manager.probeQuality(urlString: urlString) }
-                    .disabled(!isPlausibleURL || manager.isProbing || manager.isRunning || !manager.availableHeights.isEmpty)
+                    .disabled(!isPlausibleURL || manager.isProbing || !manager.availableHeights.isEmpty)
                 Divider()
                 Button { qualityHeight = 0 } label: {
                     if qualityHeight == 0 { Label(maxOptionMenuLabel, systemImage: "checkmark") } else { Text(maxOptionMenuLabel) }
@@ -708,7 +755,6 @@ struct ContentView: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
-            .disabled(busy)
             .help(tr("Необязательно — можно сразу нажать «Скачать».\nПроверка займёт немного времени, зато сразу покажет все доступные варианты качества и размер файла."))
             .onChange(of: manager.availableHeights) { heights in
                 if qualityHeight != 0, !heights.contains(qualityHeight) {
@@ -727,7 +773,47 @@ struct ContentView: View {
         .foregroundStyle(.secondary)
     }
 
+    @ViewBuilder
     private var progressSection: some View {
+        if queue.batchActive {
+            batchProgressSection
+        } else {
+            singleProgressSection
+        }
+    }
+
+    /// Several downloads at once: one common bar and a line that opens the queue.
+    private var batchProgressSection: some View {
+        TimelineView(.periodic(from: .now, by: 0.5)) { context in
+            VStack(alignment: .leading, spacing: 4) {
+                ProgressView(value: queue.batchFraction())
+                HStack(alignment: .firstTextBaseline, spacing: 14) {
+                    // The running time comes first, the same «the app hasn't frozen» sign as with one download.
+                    Text(Self.elapsedText(context.date.timeIntervalSince(batchStartTime ?? context.date)) + " · "
+                         + trf("Загрузок идёт: %d · в очереди: %d · готово: %d",
+                               queue.busyCount, queue.items.count, queue.batchDone))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    Button(tr("Открыть очередь")) {
+                        DownloadsPanel.shared.show(manager: manager, tab: .queue) { picked in urlString = picked }
+                    }
+                        .buttonStyle(.plain)
+                        .font(.caption)
+                        .foregroundColor(.accentColor)
+                }
+            }
+        }
+    }
+
+    /// «45 с» up to a minute, then «2:05».
+    private static func elapsedText(_ seconds: TimeInterval) -> String {
+        let total = max(0, Int(seconds))
+        return total < 60 ? "\(total) " + tr("с") : String(format: "%d:%02d", total / 60, total % 60)
+    }
+
+    private var singleProgressSection: some View {
         VStack(alignment: .leading, spacing: 4) {
             if manager.isRunning && manager.indeterminate {
                 ProgressView().progressViewStyle(.linear)
@@ -872,16 +958,110 @@ struct ContentView: View {
             accessHintShown = true
             showAccessHint = true
         }
+        if let list = PlaylistLink.detect(urlString) {
+            askAboutPlaylist(list, audioOnly: audioOnly)
+        } else {
+            submitCurrentLink(audioOnly: audioOnly)
+        }
+    }
+
+    /// A link with a playlist in it: read the playlist first (so the question can
+    /// say how many videos it has), then ask — the whole playlist or just the one video?
+    private func askAboutPlaylist(_ list: PlaylistLink, audioOnly: Bool) {
+        guard let ytDlp = manager.ytDlpPath, playlistStatus != tr("Читаю плейлист…") else { return }
+        playlistStatus = tr("Читаю плейлист…")
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = PlaylistLink.fetch(listURL: list.listURL, ytDlp: ytDlp)
+            DispatchQueue.main.async {
+                playlistStatus = nil
+                if result == nil { playlistUnreadable() }
+                guard result != nil || list.hasVideo else { return }
+                presentPlaylistQuestion(list, result: result, audioOnly: audioOnly)
+            }
+        }
+    }
+
+    /// The playlist can't be read: either it needs a sign-in (private, or the site wants proof
+    /// that this is not a robot) or it doesn't exist. Asks for disk access only when it's missing.
+    private func playlistUnreadable() {
+        playlistStatus = tr("Нужен вход или плейлиста не существует")
+        if !DownloadManager.hasDiskAccess { showAccessHint = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8) { playlistStatus = nil }
+    }
+
+    private func presentPlaylistQuestion(_ list: PlaylistLink,
+                                         result: (title: String?, entries: [PlaylistLink.Entry], total: Int)?,
+                                         audioOnly: Bool) {
+        var text: String
+        switch (result, list.hasVideo) {
+        case let (result?, true):
+            text = trf("В плейлисте %d видео. Скачать весь плейлист или только это видео?", result.total)
+        case let (result?, false):
+            text = trf("В плейлисте %d видео. Скачать их все? Они встанут в очередь загрузок.", result.total)
+        default:
+            text = tr("Скачать весь плейлист или только это видео?")
+        }
+        if let result, result.total > result.entries.count {
+            text += "\n\n" + trf("За один раз добавятся первые %d.", result.entries.count)
+        }
+        PlaylistQuestionPanel.shared.ask(message: text, canTakeWhole: result != nil, canTakeSingle: list.hasVideo) { choice in
+            switch choice {
+            case .whole:
+                if let result { enqueuePlaylist(result, list: list, audioOnly: audioOnly) }
+            case .single:
+                submitCurrentLink(audioOnly: audioOnly)
+            case .cancel:
+                break
+            }
+        }
+    }
+
+    /// Puts every video of the playlist into the queue, in its own folder.
+    private func enqueuePlaylist(_ result: (title: String?, entries: [PlaylistLink.Entry], total: Int), list: PlaylistLink, audioOnly: Bool) {
+        let folder = destinationURL.appendingPathComponent(PlaylistLink.folderName(for: result.title), isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let stripAudio = videoNoAudio
+        let playlist = PlaylistInfo(id: UUID(), title: result.title, listURL: list.listURL,
+                                    thumbnail: result.entries.first.flatMap { PlaylistLink.thumbnail(forVideoURL: $0.url) })
+        queue.submit(result.entries.map { entry in
+            QueuedDownload(url: entry.url, destination: folder, maxHeight: nil,
+                           audioOnly: audioOnly, stripAudio: stripAudio,
+                           videoFormat: .current, audioFormat: .current,
+                           knownTitle: entry.title,
+                           thumbnail: PlaylistLink.thumbnail(forVideoURL: entry.url),
+                           playlist: playlist)
+        })
+        clipboardChangeAtQueue = NSPasteboard.general.changeCount
+        urlString = ""
+        playlistStatus = trf("В очередь добавлено видео: %d", result.entries.count)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6) { playlistStatus = nil }
+    }
+
+    private func submitCurrentLink(audioOnly: Bool) {
         // Before a probe, the UI only shows "Максимально доступное" — honor
         // that rather than a stale specific height picked in a past probe.
         let effectiveMaxHeight = manager.availableHeights.isEmpty ? nil : (qualityHeight == 0 ? nil : qualityHeight)
-        manager.start(
-            urlString: urlString,
+        let item = QueuedDownload(
+            url: urlString.trimmingCharacters(in: .whitespacesAndNewlines),
             destination: destinationURL,
             maxHeight: effectiveMaxHeight,
             audioOnly: audioOnly,
-            stripAudio: videoNoAudio
-        )
+            stripAudio: videoNoAudio,
+            videoFormat: .current,
+            audioFormat: .current)
+        if queue.isActive(url: item.url, audioOnly: audioOnly) {
+            playlistStatus = tr("Эта ссылка уже скачивается или стоит в очереди")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { playlistStatus = nil }
+            return
+        }
+        let wasBusy = queue.busyCount > 0
+        queue.submit(item)
+        // Behind another download: the link has gone to the queue, so the field
+        // is free for the next one.
+        if wasBusy {
+            clipboardChangeAtQueue = NSPasteboard.general.changeCount
+            urlString = ""
+        }
     }
 
     /// Sends a self-contained error report straight to the developer's
@@ -1130,7 +1310,7 @@ final class InfoPanel {
     static let legal = InfoPanel(title: "Правовая информация", size: NSSize(width: 520, height: 640)) {
         AnyView(LegalView(onClose: $0))
     }
-    static let feedback = InfoPanel(title: "Обратная связь", size: NSSize(width: 480, height: 500)) {
+    static let feedback = InfoPanel(title: "Обратная связь", size: NSSize(width: 480, height: 380)) {
         AnyView(FeedbackView(onClose: $0))
     }
 
@@ -1215,9 +1395,13 @@ struct AdvancedSettingsView: View {
     var onClose: () -> Void
 
     @AppStorage("muteChime") private var muteChime = false
+    @AppStorage(ChimeVoice.key) private var chimeVoice = ChimeVoice.female.rawValue
+    @State private var voicePreview: AVAudioPlayer?
     @AppStorage(DiagnosticReporter.enabledKey) private var sendDiagnostics = true
     @AppStorage("muteLaunchSound") private var muteLaunchSound = false
     @AppStorage(SpeedLimit.key) private var speedStep = SpeedLimit.defaultStep
+    @AppStorage(Cleanup.Reminder.key) private var cleanupReminder = Cleanup.Reminder.weekly.rawValue
+    @State private var cleanupNote: String?
     @ObservedObject private var languageSettings = LanguageSettings.shared
 
     var body: some View {
@@ -1225,6 +1409,7 @@ struct AdvancedSettingsView: View {
             VStack(alignment: .leading, spacing: 12) {
                 notificationsBlock.card()
                 speedBlock.card()
+                cleanupBlock.card()
                 toolsBlock.card()
                 languageBlock.card()
                 diagnosticsBlock.card()
@@ -1241,9 +1426,21 @@ struct AdvancedSettingsView: View {
 
     private var notificationsBlock: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(tr("Уведомления")).font(.subheadline.weight(.semibold))
+            Text(tr("Уведомления")).font(.callout.bold())
             // ticked = the sound plays (the stored flags say "muted", so they are inverted here)
             switchRow(tr("Звук уведомления о скачивании"), isOn: Binding(get: { !muteChime }, set: { muteChime = !$0 }))
+            HStack(spacing: 10) {
+                Text(tr("Голос")).font(.callout)
+                PillSegments(options: ChimeVoice.allCases.map { ($0.rawValue, $0.title) }, selected: chimeVoice) { picked in
+                    chimeVoice = picked
+                    if let url = ChimeVoice(rawValue: picked)?.soundURL, let player = try? AVAudioPlayer(contentsOf: url) {
+                        player.play()
+                        voicePreview = player   // keep a strong ref while it plays
+                    }
+                }
+            }
+            .disabled(muteChime)
+            .padding(.leading, 20)
             switchRow(tr("Звук запуска приложения"), isOn: Binding(get: { !muteLaunchSound }, set: { muteLaunchSound = !$0 }))
         }
     }
@@ -1257,7 +1454,7 @@ struct AdvancedSettingsView: View {
 
     private var speedBlock: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(tr("Скорость скачивания")).font(.subheadline.weight(.semibold))
+            Text(tr("Скорость скачивания")).font(.callout.bold())
             HStack(spacing: 12) {
                 Slider(value: Binding(get: { Double(speedStep) },
                                       set: { speedStep = Int($0.rounded()) }),
@@ -1268,21 +1465,44 @@ struct AdvancedSettingsView: View {
                         .font(.callout.monospacedDigit())
                     if let note = SpeedLimit.megabytesNote(step: speedStep) {
                         Text(note)
-                            .font(.caption2)
+                            .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
                 .frame(width: 150, alignment: .leading)
             }
-            .onChange(of: speedStep) { _ in manager.speedLimitChanged() }
+            .onChange(of: speedStep) { _ in
+                for engine in DownloadQueue.shared.managers { engine.speedLimitChanged() }
+            }
+        }
+    }
+
+    private var cleanupBlock: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(tr("Напоминание об очистке")).font(.callout.bold())
+            PillSegments(options: Cleanup.Reminder.allCases.map { ($0.rawValue, $0.title) }, selected: cleanupReminder) {
+                cleanupReminder = $0
+            }
+            HStack(spacing: 10) {
+                Button(tr("Очистить сейчас")) {
+                    cleanupNote = nil
+                    Cleanup.cleanNow(queue: DownloadQueue.shared) { found in
+                        if !found { cleanupNote = tr("Чистить пока нечего.") }
+                    }
+                }
+                .buttonStyle(SoftPillStyle(compact: true))
+                if let cleanupNote {
+                    Text(cleanupNote).font(.caption).foregroundStyle(.secondary)
+                }
+            }
         }
     }
 
     private var toolsBlock: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(tr("Обновление встроенных инструментов")).font(.subheadline.weight(.semibold))
+            Text(tr("Обновление встроенных инструментов")).font(.callout.bold())
             Text(tr("Программа скачивает видео с помощью внутренних инструментов и сама их обновляет. Если видео перестало скачиваться — нажми «Проверить сейчас»."))
-                .font(.caption2)
+                .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 10) {
@@ -1298,18 +1518,18 @@ struct AdvancedSettingsView: View {
                         Text(tr("Проверить сейчас"))
                     }
                 }
-                .buttonStyle(SoftPillStyle())
+                .buttonStyle(SoftPillStyle(compact: true))
                 .disabled(manager.isRunning || manager.isCheckingToolUpdate)
 
                 if let version = manager.ytDlpVersion {
                     Text(trf("yt-dlp %@", version))
-                        .font(.caption2)
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
             if let status = manager.toolUpdateCheckStatus {
                 Text(status)
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
@@ -1317,24 +1537,21 @@ struct AdvancedSettingsView: View {
 
     private var diagnosticsBlock: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(tr("Отчёты о сбоях")).font(.subheadline.weight(.semibold))
+            Text(tr("Отчёты о сбоях")).font(.callout.bold())
             switchRow(tr("Отправлять разработчику анонимные отчёты о сбоях"), isOn: $sendDiagnostics)
             Text(tr("Анонимно, без ссылок и личных данных."))
-                .font(.caption2)
+                .font(.caption)
                 .foregroundStyle(.secondary)
         }
     }
 
     private var languageBlock: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(tr("Язык")).font(.subheadline.weight(.semibold))
-            Picker(tr("Язык"), selection: $languageSettings.language) {
-                Text("🇷🇺 Русский").tag(AppLanguage.ru)
-                Text("🇺🇸 English").tag(AppLanguage.en)
+            Text(tr("Язык")).font(.callout.bold())
+            PillSegments(options: [(AppLanguage.ru.rawValue, "🇷🇺 Русский"), (AppLanguage.en.rawValue, "🇺🇸 English")],
+                         selected: languageSettings.language.rawValue) { picked in
+                if let language = AppLanguage(rawValue: picked) { languageSettings.language = language }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 260)
         }
     }
 }
@@ -1523,7 +1740,7 @@ private struct WhatsNewList: View {
                 ForEach(ContentView.changelog[version] ?? [], id: \.self) { item in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text("•").foregroundStyle(.secondary)
-                        Text(tr(item)).fixedSize(horizontal: false, vertical: true)
+                        Text(tr(item)).font(.callout).fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
@@ -1535,7 +1752,7 @@ private struct WhatsNewList: View {
                         .font(.title2)
                         .foregroundStyle(Color.accentColor)
                     Text(tr(callout))
-                        .fontWeight(.semibold)
+                        .font(.callout.weight(.semibold))
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
                 }
@@ -1641,14 +1858,14 @@ struct InfoScaffold<Content: View>: View {
 /// Bulleted "heading + items" block, shared by both windows.
 func infoSection(_ title: String, _ items: [String]) -> some View {
     VStack(alignment: .leading, spacing: 8) {
-        Text(title).font(.headline)
+        Text(title).font(.callout.bold())
         ForEach(items, id: \.self) { item in
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("•").foregroundStyle(.secondary)
                 if item.contains("⚙") {
                     TextWithGear(text: item, action: { AdvancedSettingsPanel.shared.show() })
                 } else {
-                    Text(item).fixedSize(horizontal: false, vertical: true)
+                    Text(item).font(.callout).fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -1684,7 +1901,7 @@ struct AboutView: View {
                         .frame(width: 60, height: 60)
                     VStack(alignment: .leading, spacing: 0) {
                         Text("SCORPENA").font(.title2.bold())
-                        Text("video downloader").font(.headline.weight(.regular))
+                        Text("video downloader").font(.callout).foregroundStyle(.secondary)
                     }
                 }
                 Text("by Yaroslav Lukyanov")
@@ -1694,16 +1911,20 @@ struct AboutView: View {
                     .font(.callout.weight(.semibold).italic())
                     .foregroundColor(.accentColor)
                 Text(tr("Нативное приложение для Mac — скачивает видео и аудио с YouTube, VK, Instagram, TikTok, Vimeo и ещё ~1750 сайтов одним кликом. Видео — в MP4, MOV, WebM или MKV, звук — в MP3, WAV или M4A: формат выбирается рядом с кнопками скачивания."))
+                    .font(.callout)
                     .foregroundStyle(.secondary)
 
                 infoSection(tr("Что есть"), [
                     "Размер файла и доступное качество видны до скачивания.",
                     "Ссылка из буфера обмена подставляется сама.",
-                    "История последних скачиваний.",
+                    "Несколько скачиваний одновременно, остальные ждут в очереди.",
+                    "Плейлисты целиком.",
+                    "История и очередь загрузок.",
                     "Пауза и продолжение скачивания, даже если пропал интернет или программа была закрыта.",
                     "Ограничение скорости скачивания в «Дополнительно» (⚙).",
                     "Отчёт об ошибке разработчику в один клик.",
                     "Русский и английский языки.",
+                    "Напоминание об очистке места на диске.",
                     "Обновление программы одной кнопкой.",
                     "Любой Mac: Intel и Apple Silicon, macOS 13 и новее.",
                 ].map(tr))
@@ -1711,11 +1932,11 @@ struct AboutView: View {
                 infoSection(tr("Чего нет"), [
                     "Скачивания платного и защищённого видео (Netflix, Кинопоиск, ivi, Okko и т.д.): оно закрыто DRM, системой шифрования от копирования.",
                     "Записи идущих прямых эфиров: только уже завершённых.",
-                    "Скачивания плейлистов.",
                 ].map(tr))
 
                 VStack(alignment: .leading, spacing: 10) {
                     Text(tr("Программа бесплатная. Если она тебе пригодилась, можно поддержать её развитие."))
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                     Button(tr("Поддержать")) { DonateLink.open() }
                         .buttonStyle(SoftPillStyle())
@@ -1754,18 +1975,21 @@ struct FeedbackView: View {
                         Text(tr("Обращение")).font(.caption).foregroundStyle(.secondary)
                         TextField(tr("Напиши сюда…"), text: $message, axis: .vertical)
                             .lineLimit(3...6)
+                            .font(.callout)
                             .fieldStyle()
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
                         Text(tr("Имя (необязательно)")).font(.caption).foregroundStyle(.secondary)
                         TextField(tr("Как тебя зовут"), text: $name)
+                            .font(.callout)
                             .fieldStyle()
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
                         Text(tr("Как связаться (необязательно)")).font(.caption).foregroundStyle(.secondary)
                         TextField(tr("Например, ссылка на Telegram"), text: $contact)
+                            .font(.callout)
                             .fieldStyle()
                     }
 
@@ -1790,7 +2014,7 @@ struct FeedbackView: View {
                 .disabled(message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .padding(.vertical, 16)
         }
-        .frame(width: 480, height: 500)
+        .frame(width: 480, height: 380)
         .onAppear { cooldownNotice = nil; sentNotice = false }
     }
 
@@ -1854,6 +2078,7 @@ struct LegalView: View {
                     para("Сама программа легальна.", "Внутри — открытый движок yt-dlp, Scorpena – video downloader просто удобная оболочка над ним. Она не взламывает сайты: берёт те же потоки, что сайт и так отдаёт браузеру.")
 
                     Text(tr("Scorpena – video downloader позволяет сохранять видео и аудио локально. Убедись, что твоё использование соответствует законодательству твоей страны и условиям сервиса, с которого ты скачиваешь контент."))
+                        .font(.callout)
                         .fixedSize(horizontal: false, vertical: true)
 
                     para("Нельзя:", "обходить платную подписку и DRM (Netflix, Кинопоиск и т.д.) — программа этого и не умеет.")
@@ -1879,6 +2104,7 @@ struct LegalView: View {
 
     private func para(_ lead: String, _ rest: String) -> some View {
         (Text(tr(lead)).bold() + Text(" " + tr(rest)))
+            .font(.callout)
             .fixedSize(horizontal: false, vertical: true)
     }
 }

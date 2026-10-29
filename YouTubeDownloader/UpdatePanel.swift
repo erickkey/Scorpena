@@ -42,7 +42,7 @@ final class UpdatePanel: ObservableObject {
         win.title = "Scorpena – video downloader"
         win.isReleasedWhenClosed = false
         win.isRestorable = false
-        win.setContentSize(NSSize(width: 470, height: 180))
+        win.setContentSize(NSSize(width: 440, height: 270))
         win.centerExactlyOnScreen()
         win.makeKeyAndOrderFront(nil)
         window = win
@@ -96,32 +96,27 @@ private struct UpdatePanelView: View {
     @ObservedObject private var languageSettings = LanguageSettings.shared
 
     var body: some View {
-        VStack(spacing: 16) {
-            HStack(alignment: .top, spacing: 16) {
-                Image(nsImage: NSApp.applicationIconImage)
-                    .resizable()
-                    .frame(width: 60, height: 60)
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(title).font(.headline)
-                    if !detail.isEmpty {
-                        Text(detail)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    progress
-                }
-                Spacer(minLength: 0)
+        VStack(spacing: 12) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .frame(width: 56, height: 56)
+            Text(title)
+                .font(.title3.bold())
+                .multilineTextAlignment(.center)
+            if !detail.isEmpty {
+                Text(detail)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            HStack(spacing: 10) {
-                Spacer()
-                buttons
-                Spacer()
-            }
+            progress
+            HStack(spacing: 10) { buttons }
+                .padding(.top, 8)
         }
-        .padding(20)
-        .frame(width: 470)
-        .fixedSize(horizontal: false, vertical: true)
+        .padding(EdgeInsets(top: 24, leading: 28, bottom: 22, trailing: 28))
+        .frame(width: 440)
+        .frame(maxHeight: .infinity)
     }
 
     @ViewBuilder private var progress: some View {
@@ -138,29 +133,17 @@ private struct UpdatePanelView: View {
     @ViewBuilder private var buttons: some View {
         switch panel.phase {
         case .confirm:
-            Button(tr("Позже")) { panel.close() }
-                .buttonStyle(SoftPillStyle())
-            Button(tr("Обновить")) { panel.confirm() }
-                .buttonStyle(PrimaryPillStyle())
-                .keyboardShortcut(.defaultAction)
+            DialogButton(title: tr("Позже")) { panel.close() }
+            DialogButton(title: tr("Обновить"), primary: true) { panel.confirm() }
         case .downloadRunning:
-            Button(tr("Понятно")) { panel.close() }
-                .buttonStyle(PrimaryPillStyle())
-                .keyboardShortcut(.defaultAction)
+            DialogButton(title: tr("Понятно"), primary: true) { panel.close() }
         case .finished:
-            Button(tr("Отлично")) { panel.close() }
-                .buttonStyle(PrimaryPillStyle())
-                .keyboardShortcut(.defaultAction)
+            DialogButton(title: tr("Отлично"), primary: true) { panel.close() }
         case .rolledBack, .failed:
-            Button(tr("Закрыть")) { panel.close() }
-                .buttonStyle(SoftPillStyle())
-            Button(tr("Скачать вручную")) { panel.openDownloadPage() }
-                .buttonStyle(PrimaryPillStyle())
-                .keyboardShortcut(.defaultAction)
+            DialogButton(title: tr("Закрыть")) { panel.close() }
+            DialogButton(title: tr("Скачать вручную"), primary: true) { panel.openDownloadPage() }
         case .renamed:
-            Button(tr("Ладно")) { panel.confirm() }
-                .buttonStyle(PrimaryPillStyle())
-                .keyboardShortcut(.defaultAction)
+            DialogButton(title: tr("Ладно"), primary: true) { panel.confirm() }
         case .downloading, .verifying, .installing, .renaming:
             EmptyView()
         }

@@ -18,7 +18,12 @@ else { fatalError("cannot read source") }
 
 let S = 1024
 let inset: CGFloat = 76               // transparent margin on each side
-let target = CGRect(x: inset, y: inset, width: CGFloat(S) - inset * 2, height: CGFloat(S) - inset * 2)
+let box = CGFloat(S) - inset * 2
+// Keep the picture's own proportions (it isn't exactly square) and centre it.
+let scale = min(box / CGFloat(cgSrc.width), box / CGFloat(cgSrc.height))
+let drawW = CGFloat(cgSrc.width) * scale
+let drawH = CGFloat(cgSrc.height) * scale
+let target = CGRect(x: (CGFloat(S) - drawW) / 2, y: (CGFloat(S) - drawH) / 2, width: drawW, height: drawH)
 
 let space = CGColorSpaceCreateDeviceRGB()
 guard let ctx = CGContext(

@@ -29,11 +29,18 @@ final class DownloadManager: ObservableObject {
 
     // MARK: Published state (mutated on the main queue only)
 
+    /// Only the main window's engine remembers an unfinished download across
+    /// launches; the extra engines the queue starts for parallel downloads don't.
+    var tracksUnfinished = true
+    private var lastRequest: UnfinishedDownload?
+
     @Published private(set) var phase: Phase = .idle {
         didSet {
             // A finished, failed or cancelled download is nothing to resume later.
             switch phase {
-            case .finished, .failed, .cancelled: UnfinishedDownload.clear()
+            case .finished, .failed, .cancelled:
+                if tracksUnfinished { UnfinishedDownload.clear() }
+                removeEmptyStaging()
             default: break
             }
         }
@@ -105,6 +112,7 @@ final class DownloadManager: ObservableObject {
     private var lineBuffer = Data()
 
     private var lastDestination: URL?          // folder of the current/last download
+    private var stagingDir: URL?               // where the finished file waits until it is moved to lastDestination
     private var transcodeInput: URL?           // original file being replaced
     private var transcodeOutput: URL?          // ffmpeg's temp output
     private var transcodeDuration: Double?     // seconds, for progress
@@ -116,6 +124,10 @@ final class DownloadManager: ObservableObject {
     private var pendingStripAudio = false
     private var pendingVideoFormat: VideoFormat = .mp4
     private var pendingAudioFormat: AudioFormat = .mp3
+    /// How many downloads share the speed limit right now (set by the queue).
+    var speedShare: (DownloadManager) -> Int = { _ in 1 }
+    /// Playlist videos are recorded in the history as one playlist entry, not one by one.
+    var recordsHistory = true
     private var pendingSpeedLimit = 0
     private var userPaused = false
     private var runningSpeedLimit = 0          // limit the current yt-dlp process was started with
@@ -157,6 +169,7 @@ final class DownloadManager: ObservableObject {
         ytDlpPath = ToolLocator.find("yt-dlp", userOverride: defaults.string(forKey: ytDlpKey))
         ffmpegPath = ToolLocator.find("ffmpeg", userOverride: defaults.string(forKey: ffmpegKey))
         refreshYtDlpVersion()
+        CookiePreflight.runOnceInBackground()
     }
 
     func refreshYtDlpVersion() {
@@ -210,9 +223,16 @@ final class DownloadManager: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: work)
     }
 
+    /// The chosen limit (in kilobits per second), split equally between the downloads running at once.
+    private var effectiveSpeedLimit: Int {
+        let total = SpeedLimit.current * 1000
+        guard total > 0 else { return 0 }
+        return max(100, total / max(1, speedShare(self)))
+    }
+
     private func applySpeedLimitIfNeeded() {
         guard isRunning, canPause, case .download = currentJob,
-              SpeedLimit.current != runningSpeedLimit else { return }
+              effectiveSpeedLimit != runningSpeedLimit else { return }
         restartStartTime = downloadStartTime
         userPaused = true
         resumeAfterPause = true
@@ -226,8 +246,18 @@ final class DownloadManager: ObservableObject {
         process?.terminate()
     }
 
+    /// Brings back a download that was paused when the app closed: it shows as
+    /// paused and nothing runs until «Продолжить».
+    func restorePaused(_ saved: UnfinishedDownload) {
+        guard !isRunning, !isPaused else { return }
+        lastRequest = saved
+        progress = 0
+        statusLine = tr("Пауза — нажми «Продолжить»")
+        phase = .paused
+    }
+
     func resume() {
-        guard isPaused, let saved = UnfinishedDownload.saved else { return }
+        guard isPaused, let saved = lastRequest ?? UnfinishedDownload.saved else { return }
         resume(saved)
     }
 
@@ -284,7 +314,7 @@ final class DownloadManager: ObservableObject {
     }
 
     func probeQuality(urlString: String) {
-        guard !isRunning, !isProbing else { return }
+        guard !isProbing else { return }
         let url = Self.normalizedURLString(urlString)
         guard !url.isEmpty, let ytDlp = ytDlpPath else { return }
 
@@ -298,12 +328,14 @@ final class DownloadManager: ObservableObject {
         approxSizeByHeight = [:]
         approxAudioBytes = nil
 
+        // While a download is running its status line belongs to the download.
         let start = Date()
-        statusLine = trf("Проверяю доступные качества… %d с", 0)
+        if !isRunning { statusLine = trf("Проверяю доступные качества… %d с", 0) }
         probeTimer?.invalidate()
         probeTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            guard let self, !self.isRunning else { return }
             let elapsed = Int(Date().timeIntervalSince(start))
-            self?.statusLine = trf("Проверяю доступные качества… %d с", elapsed)
+            self.statusLine = trf("Проверяю доступные качества… %d с", elapsed)
         }
 
         let lastGood = CookieSource.fromStorage(
@@ -325,9 +357,11 @@ final class DownloadManager: ObservableObject {
                     self.availableHeights = heights
                     self.approxSizeByHeight = sizes
                     self.approxAudioBytes = duration.map { Int64($0 * 40_000) }   // 320 kbps ≈ 40 KB/s
-                    self.statusLine = trf("Доступно (%@ с): ", elapsed) + heights.map { "\($0)p" }.joined(separator: ", ")
-                    self.statusIsProbeResult = true
-                } else {
+                    if !self.isRunning {
+                        self.statusLine = trf("Доступно (%@ с): ", elapsed) + heights.map { "\($0)p" }.joined(separator: ", ")
+                        self.statusIsProbeResult = true
+                    }
+                } else if !self.isRunning {
                     self.statusLine = trf("Не удалось определить качества за %@ с — при скачивании возьмётся максимум доступное.", elapsed)
                     self.needsFullDiskAccess = !Self.hasDiskAccess
                     self.statusIsProbeResult = true
@@ -352,6 +386,22 @@ final class DownloadManager: ObservableObject {
     /// YouTube needs a JavaScript engine to solve its signature/"n"
     /// challenges (yt-dlp ships the solver scripts but not an engine), so
     /// point yt-dlp at the deno bundled next to it.
+    /// Cookie choices to try, in order, when asking a site about a video
+    /// without downloading it: none first, then the browser that worked last,
+    /// then the ones the first-launch check found signed in.
+    static func metadataCookieArgs() -> [[String]] {
+        var sets: [[String]] = [[]]
+        func add(_ source: CookieSource) {
+            guard case .browser = source, !sets.contains(source.ytDlpArgs) else { return }
+            sets.append(source.ytDlpArgs)
+        }
+        if let good = CookieSource.fromStorage(UserDefaults.standard.string(forKey: "lastCookieSource") ?? "") {
+            add(good)
+        }
+        for browser in CookiePreflight.rankedBrowsers { add(.browser(browser)) }
+        return sets
+    }
+
     static func jsRuntimeArgs() -> [String] {
         guard let bin = ToolLocator.bundledBinDirectory else { return [] }
         let deno = bin + "/deno"
@@ -568,15 +618,20 @@ final class DownloadManager: ObservableObject {
         pendingStripAudio = stripAudio
         pendingVideoFormat = videoFormat
         pendingAudioFormat = audioFormat
-        pendingSpeedLimit = SpeedLimit.current
+        pendingSpeedLimit = effectiveSpeedLimit
         userPaused = false
         canPause = false
-        UnfinishedDownload(url: url, destination: destination.path, maxHeight: maxHeight,
-                           audioOnly: audioOnly, stripAudio: stripAudio,
-                           videoFormat: videoFormat.rawValue, audioFormat: audioFormat.rawValue,
-                           name: nil).save()
+        let request = UnfinishedDownload(url: url, destination: destination.path, maxHeight: maxHeight,
+                                         audioOnly: audioOnly, stripAudio: stripAudio,
+                                         videoFormat: videoFormat.rawValue, audioFormat: audioFormat.rawValue,
+                                         name: nil)
+        lastRequest = request
+        if tracksUnfinished { request.save() }
         downloadStartTime = Date()
         lastDestination = destination
+        let staging = Self.partialDir.appendingPathComponent("ready-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+        stagingDir = staging
         lastDownloadedFile = nil
         fragmentedDownload = false
         slowFragmentedSite = url.lowercased().contains("vimeo.")
@@ -592,6 +647,16 @@ final class DownloadManager: ObservableObject {
         // fails do we reach for cookies, trying the browser that worked last
         // time first (skips retrying browsers that are known not to be logged in).
         var browsers: [CookieSource] = Self.installedCookieBrowsers().map { .browser($0) }
+        // Browsers the first-launch check found signed in come before the rest.
+        let ranked = CookiePreflight.rankedBrowsers
+        browsers = browsers.enumerated().sorted { a, b in
+            func rank(_ s: CookieSource) -> Int {
+                if case .browser(let name) = s, let i = ranked.firstIndex(of: name) { return i }
+                return ranked.count
+            }
+            let (ra, rb) = (rank(a.element), rank(b.element))
+            return ra != rb ? ra < rb : a.offset < b.offset
+        }.map(\.element)
         if let good = CookieSource.fromStorage(UserDefaults.standard.string(forKey: lastCookieKey) ?? ""),
            browsers.contains(good) {
             browsers.removeAll { $0 == good }
@@ -614,8 +679,12 @@ final class DownloadManager: ObservableObject {
         let ffmpegDir = (ffmpeg as NSString).deletingLastPathComponent
         let heightFilter = pendingMaxHeight.map { "[height<=\($0)]" } ?? ""
 
-        func outTemplate(_ name: String) -> String {
-            destination.appendingPathComponent(name).path
+        // Finished file → hidden staging folder; intermediate files → shared hidden
+        // "temp" folder (so a paused or interrupted download carries on from there).
+        let tempDir = Self.partialDir.appendingPathComponent("temp", isDirectory: true)
+        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        func outputArgs(_ template: String) -> [String] {
+            ["-P", "home:" + (stagingDir ?? destination).path, "-P", "temp:" + tempDir.path, "-o", template]
         }
 
         runningSpeedLimit = pendingSpeedLimit
@@ -633,13 +702,11 @@ final class DownloadManager: ObservableObject {
             "--retries", "60", "--fragment-retries", "60",
             "--retry-sleep", "http:exp=1:20", "--retry-sleep", "fragment:exp=1:20",
             "--socket-timeout", "20",
-        ] + SpeedLimit.ytDlpArgs(pendingSpeedLimit) + Self.jsRuntimeArgs()
+        ] + SpeedLimit.ytDlpArgs(kbit: pendingSpeedLimit) + Self.jsRuntimeArgs()
         if pendingAudioOnly {
             arguments += pendingAudioFormat.ytDlpArgs
-            arguments += [
-                // «Название (Scorpena video downloader).mp3»
-                "-o", outTemplate("%(title)s (Scorpena video downloader).%(ext)s"),
-            ]
+            // «Название (Scorpena video downloader).mp3»
+            arguments += outputArgs("%(title)s (Scorpena video downloader).%(ext)s")
         } else {
             let formatSpec: String
             let sortSpec: String
@@ -682,10 +749,8 @@ final class DownloadManager: ObservableObject {
             case .mkv:  arguments += ["--merge-output-format", "mkv", "--remux-video", "mkv"]
             case .webm: arguments += ["--merge-output-format", "webm", "--recode-video", "webm"]
             }
-            arguments += [
-                // «1920x1080 Название (Scorpena video downloader).mp4»
-                "-o", outTemplate("%(width)sx%(height)s %(title)s (Scorpena video downloader).%(ext)s"),
-            ]
+            // «1920x1080 Название (Scorpena video downloader).mp4»
+            arguments += outputArgs("%(width&{}x|)s%(height&{} |)s%(title)s (Scorpena video downloader).%(ext)s")
         }
         arguments += source.ytDlpArgs
         arguments.append(pendingURL)
@@ -876,7 +941,7 @@ final class DownloadManager: ObservableObject {
         name = name.replacingOccurrences(of: #"\.f\d+$"#, with: "", options: .regularExpression)
         name = name.replacingOccurrences(of: " (Scorpena video downloader)", with: "")
         name = name.replacingOccurrences(of: #"^\d+x\d+ "#, with: "", options: .regularExpression)
-        guard !name.isEmpty, var saved = UnfinishedDownload.saved else { return }
+        guard tracksUnfinished, !name.isEmpty, var saved = UnfinishedDownload.saved else { return }
         saved.name = String(name.prefix(80))
         saved.save()
     }
@@ -1082,7 +1147,8 @@ final class DownloadManager: ObservableObject {
     // MARK: Auto-transcode to H.264
 
     /// Sets the finished state for a completed video and plays the chime.
-    private func markVideoFinished(_ status: String, file: URL? = nil) {
+    private func markVideoFinished(_ status: String, file stagedFile: URL? = nil) {
+        let file = deliver(stagedFile)
         progress = 1
         phase = .finished
         if let start = downloadStartTime {
@@ -1093,8 +1159,10 @@ final class DownloadManager: ObservableObject {
         downloadStartTime = nil
         lastDownloadedFile = file
         DiagnosticReporter.noteDownloadSuccess()
-        DownloadHistory.shared.record(url: pendingURL, audioOnly: pendingAudioOnly,
-                                      ytDlp: ytDlpPath, cookieArgs: currentCookieSource.ytDlpArgs)
+        if recordsHistory {
+            DownloadHistory.shared.record(url: pendingURL, audioOnly: pendingAudioOnly,
+                                          ytDlp: ytDlpPath, cookieArgs: currentCookieSource.ytDlpArgs)
+        }
         playChime()
     }
 
@@ -1105,8 +1173,10 @@ final class DownloadManager: ObservableObject {
     }
 
     private func playChime() {
-        guard !UserDefaults.standard.bool(forKey: "muteChime") else { return }
-        let url = Bundle.main.url(forResource: "DownloadComplete", withExtension: "mp3")
+        guard !UserDefaults.standard.bool(forKey: "muteChime"),
+              DownloadQueue.shared.shouldChime(whenFinishing: self) else { return }
+        let url = ChimeVoice.current.soundURL
+            ?? Bundle.main.url(forResource: "DownloadComplete", withExtension: "mp3")
             ?? {
                 let home = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
                 let candidate = home?.appendingPathComponent("download complete.mp3")
@@ -1198,6 +1268,7 @@ final class DownloadManager: ObservableObject {
             }
         } else {
             try? fm.removeItem(at: output)
+            _ = deliver(input)
             phase = .failed(trf("Видео скачано (%@), но перекодировать в H.264 не удалось. Файл остался в исходном кодеке.", input.lastPathComponent))
             statusLine = tr("Скачано, но не в H.264")
         }
@@ -1207,9 +1278,73 @@ final class DownloadManager: ObservableObject {
         transcodeDuration = nil
     }
 
-    /// Newest matching file in the download folder (yt-dlp just wrote it).
+    /// Everything yt-dlp makes on the way (separate video and audio streams,
+    /// `.part` files, the H.264 copy) lives here, out of sight, so the chosen
+    /// folder only ever gets the one finished file.
+    static var partialDir: URL {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return support.appendingPathComponent("VideoDownloader/Partial", isDirectory: true)
+    }
+
+    /// The staging folder of a download that ended without a finished file.
+    private func removeEmptyStaging() {
+        guard let staging = stagingDir else { return }
+        let left = (try? FileManager.default.contentsOfDirectory(atPath: staging.path)) ?? []
+        if left.isEmpty {
+            try? FileManager.default.removeItem(at: staging)
+            stagingDir = nil
+        }
+    }
+
+    /// Drops leftovers of downloads abandoned for two weeks.
+    static func cleanOldPartials() {
+        let fm = FileManager.default
+        let cutoff = Date().addingTimeInterval(-14 * 24 * 3600)
+        func sweep(_ dir: URL) {
+            guard let items = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.contentModificationDateKey]) else { return }
+            for item in items {
+                let date = (try? item.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? Date()
+                if date < cutoff { try? fm.removeItem(at: item) }
+            }
+        }
+        // Staging folders left empty by an interrupted download.
+        if let leftovers = try? fm.contentsOfDirectory(atPath: partialDir.path) {
+            for name in leftovers where name.hasPrefix("ready-") {
+                let dir = partialDir.appendingPathComponent(name)
+                if ((try? fm.contentsOfDirectory(atPath: dir.path)) ?? []).isEmpty { try? fm.removeItem(at: dir) }
+            }
+        }
+        sweep(partialDir)
+        sweep(partialDir.appendingPathComponent("temp", isDirectory: true))
+    }
+
+    /// Moves the finished file from the hidden staging folder into the chosen
+    /// folder (never overwriting something already there) and returns where it is now.
+    private func deliver(_ file: URL?) -> URL? {
+        guard let file, let staging = stagingDir, let destination = lastDestination,
+              file.deletingLastPathComponent().standardizedFileURL == staging.standardizedFileURL else { return file }
+        let fm = FileManager.default
+        try? fm.createDirectory(at: destination, withIntermediateDirectories: true)
+        var target = destination.appendingPathComponent(file.lastPathComponent)
+        var copyNumber = 2
+        while fm.fileExists(atPath: target.path) {
+            let name = file.deletingPathExtension().lastPathComponent
+            target = destination.appendingPathComponent("\(name) (\(copyNumber))").appendingPathExtension(file.pathExtension)
+            copyNumber += 1
+        }
+        do {
+            try fm.moveItem(at: file, to: target)
+            try? fm.removeItem(at: staging)
+            stagingDir = nil
+            return target
+        } catch {
+            return file
+        }
+    }
+
+    /// Newest matching file in the staging folder (yt-dlp just wrote it).
     private func newestDownloadedFile(extensions: Set<String>) -> URL? {
-        guard let dir = lastDestination else { return nil }
+        guard let dir = stagingDir ?? lastDestination else { return nil }
         let exts = Set(extensions.map { $0.lowercased() })
         let fm = FileManager.default
         guard let items = try? fm.contentsOfDirectory(

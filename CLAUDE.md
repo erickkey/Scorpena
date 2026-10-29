@@ -10,9 +10,13 @@ it corrupts the file — that's why README warns about it).
 
 - The app was renamed **VideoDownloader → Scorpena ("Scorpena – video downloader")**;
   the GitHub repo is now `erickkey/Scorpena` (old URLs redirect).
-- **Version 3.0 is published (2026-10-28):** release `v3.0` with `Scorpena.dmg` and the legacy
-  `VideoDownloader.dmg`, and `version.json` is bumped to 3.0, so installed apps show
-  «Доступно обновление». Check with `gh release list --repo erickkey/Scorpena`.
+- **Version 3.1 is the current one (2026-10-29):** parallel downloads with a queue
+  (`DownloadQueue.swift`, saved in `queue.json`, pauses included), playlists (`Playlist.swift`),
+  the merged «Загрузки» window (queue + history by day), cleanup reminder (`Cleanup.swift`),
+  quit warning (`QuitWarning.swift`), first-launch browser-login preflight (`CookiePreflight.swift`),
+  new logo and one shared look for all windows (`Style.swift`: pills, `DialogLayout`).
+  3.0 was published 2026-10-28. Check what is live with `gh release list --repo erickkey/Scorpena`.
+  New `.swift` files are NOT in `YouTubeDownloader.xcodeproj` (the build is `Scripts/build-app.sh`).
 - Releases must always carry TWO DMGs: `Scorpena.dmg` and the legacy `VideoDownloader.dmg`
   (installed 2.0/2.1 apps fetch exactly that file name and look for `VideoDownloader.app`).
   `version.json` is bumped LAST.
@@ -114,9 +118,10 @@ final wording themselves as often as not; paste their edits back into the
   full per-resolution list (with per-item file sizes) appear. Downloading
   before probing always takes the true max, never a stale previously
   probed height (see `startDownload`'s `effectiveMaxHeight` logic).
-- **"Скачать видео" and "Скачать звук" are separate buttons**, not a
-  checkbox toggling one button's behavior — the checkbox approach was
-  explicitly replaced.
+- **There is ONE «Скачать» button.** What it saves depends on the format rows under the
+  URL field: picking a format in the «Видео» or «Звук» row also switches `downloadMode`
+  (video | audio). (2.0 had separate «Скачать видео»/«Скачать звук» buttons; 3.0 replaced
+  them — don't describe them in texts.)
 - **A single elapsed-time counter** (`runStartTime`, ticks via
   `TimelineView` under the status line) is the general "the app hasn't
   frozen" indicator for *any* long-running op (download, Homebrew

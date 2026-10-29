@@ -10,15 +10,20 @@ struct HistoryItem: Codable, Identifiable, Equatable {
     var thumbnailFile: String?
     var audioOnly: Bool
     var date: Date
+    /// Set for a whole playlist: how many of its videos were downloaded.
+    var playlistCount: Int? = nil
+
+    var isPlaylist: Bool { playlistCount != nil }
 }
 
-/// The last 20 finished downloads, kept across launches (a JSON file plus
-/// small JPEG previews in Application Support). Only the newest 20 are ever
-/// kept — older entries and their preview images are dropped on every add,
-/// at launch and again on quit.
+/// Finished downloads, kept across launches (a JSON file plus small JPEG
+/// previews in Application Support) and shown by day. Nothing is dropped
+/// automatically; when a day gets past `dayLimit` entries the window offers to
+/// clear it. A whole playlist is ONE entry.
 final class DownloadHistory: ObservableObject {
     static let shared = DownloadHistory()
-    static let limit = 20
+    /// A day with more entries than this gets a «clear it» notice.
+    static let dayLimit = 100
 
     @Published private(set) var items: [HistoryItem] = []
 
@@ -54,15 +59,43 @@ final class DownloadHistory: ObservableObject {
         }
     }
 
+    /// One entry for a whole playlist (its link, name, cover and how many videos came down).
+    func recordPlaylist(url: String, title: String?, count: Int, thumbnail: URL?) {
+        items.removeAll { $0.url == url && $0.isPlaylist }
+        let item = HistoryItem(url: url, title: title, thumbnailFile: nil, audioOnly: false,
+                               date: Date(), playlistCount: count)
+        items.insert(item, at: 0)
+        prune()
+        guard let thumbnail else { return }
+        URLSession.shared.dataTask(with: URLRequest(url: thumbnail, timeoutInterval: 20)) { [weak self] data, _, _ in
+            guard let data else { return }
+            DispatchQueue.main.async { self?.storeThumbnail(data, for: item.id) }
+        }.resume()
+    }
+
     func clear() {
         items.removeAll()
         prune()
     }
 
-    /// Keeps only the newest `limit` entries and deletes preview files that
-    /// no entry refers to any more.
+    /// What entries older than `cutoff` would free: how many, and the size of their pictures.
+    func staleSummary(olderThan cutoff: Date) -> (count: Int, bytes: Int64) {
+        let old = items.filter { $0.date < cutoff }
+        let bytes = old.compactMap { item -> Int64? in
+            guard let url = thumbnailURL(for: item),
+                  let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize else { return nil }
+            return Int64(size)
+        }.reduce(0, +)
+        return (old.count, bytes)
+    }
+
+    func removeEntries(olderThan cutoff: Date) {
+        items.removeAll { $0.date < cutoff }
+        prune()
+    }
+
+    /// Deletes preview files that no entry refers to any more.
     func prune() {
-        if items.count > Self.limit { items = Array(items.prefix(Self.limit)) }
         save()
         let used = Set(items.compactMap(\.thumbnailFile))
         let files = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
@@ -167,35 +200,6 @@ final class DownloadHistory: ObservableObject {
     }
 }
 
-/// Own window (like «Дополнительно» / «Что нового»): newest download first;
-/// clicking a row hands its link back and closes the window.
-final class HistoryPanel {
-    static let shared = HistoryPanel()
-    private var window: NSWindow?
-
-    func show(onPick: @escaping (String) -> Void) {
-        NSApp.activate(ignoringOtherApps: true)
-        window?.close()
-        let hosting = NSHostingController(
-            rootView: HistoryView(
-                onPick: { [weak self] url in
-                    self?.window?.close()
-                    onPick(url)
-                },
-                onClose: { [weak self] in self?.window?.close() })
-        )
-        let win = NSWindow(contentViewController: hosting)
-        win.styleMask = [.titled, .closable]
-        win.title = tr("История скачиваний")
-        win.isReleasedWhenClosed = false
-        win.isRestorable = false
-        win.setContentSize(NSSize(width: 540, height: 580))
-        win.centerExactlyOnScreen()
-        win.makeKeyAndOrderFront(nil)
-        window = win
-    }
-}
-
 struct HistoryView: View {
     var onPick: (String) -> Void
     var onClose: () -> Void
@@ -204,20 +208,50 @@ struct HistoryView: View {
     @ObservedObject private var languageSettings = LanguageSettings.shared
 
     @State private var confirmingClear = false
+    @State private var collapsedDays: Set<Date> = []
+
+    /// Entries grouped by day, newest day first.
+    private var days: [(day: Date, items: [HistoryItem])] {
+        let calendar = Calendar.current
+        let grouped = Dictionary(grouping: history.items) { calendar.startOfDay(for: $0.date) }
+        return grouped.keys.sorted(by: >).map { day in
+            (day, grouped[day]!.sorted { $0.date > $1.date })
+        }
+    }
+
+    private var locale: Locale {
+        Locale(identifier: languageSettings.language == .en ? "en" : "ru")
+    }
+
+    /// «Сегодня», «Вчера», then «27 октября» (with the year for earlier years).
+    private func dayTitle(_ day: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(day) { return tr("Сегодня") }
+        if calendar.isDateInYesterday(day) { return tr("Вчера") }
+        let sameYear = calendar.isDate(day, equalTo: Date(), toGranularity: .year)
+        let format: Date.FormatStyle = sameYear
+            ? .dateTime.day().month(.wide)
+            : .dateTime.day().month(.wide).year()
+        return day.formatted(format.locale(locale))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
+                LazyVStack(alignment: .leading, spacing: 8) {
                     WindowTitleRow(title: tr("История скачиваний"))
+                        .padding(.bottom, 6)
                     if history.items.isEmpty {
                         Text(tr("Пока нет скачиваний"))
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity)
                             .padding(.top, 40)
                     } else {
-                        VStack(spacing: 8) {
-                            ForEach(history.items) { item in row(item) }
+                        ForEach(Array(days.enumerated()), id: \.element.day) { index, group in
+                            dayHeader(group.day, count: group.items.count, isFirst: index == 0)
+                            if !collapsedDays.contains(group.day) {
+                                ForEach(group.items) { item in row(item) }
+                            }
                         }
                     }
                 }
@@ -237,7 +271,7 @@ struct HistoryView: View {
             }
             .padding(EdgeInsets(top: 12, leading: 24, bottom: 16, trailing: 24))
         }
-        .frame(width: 540, height: 580)
+        .frame(width: 560, height: 540)
         .alert(tr("Очистить историю?"), isPresented: $confirmingClear) {
             Button(tr("Очистить"), role: .destructive) { history.clear() }
             Button(tr("Отмена"), role: .cancel) {}
@@ -246,11 +280,63 @@ struct HistoryView: View {
         }
     }
 
+    private func dayHeader(_ day: Date, count: Int, isFirst: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+            Button {
+                if collapsedDays.contains(day) { collapsedDays.remove(day) } else { collapsedDays.insert(day) }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: collapsedDays.contains(day) ? "chevron.right" : "chevron.down")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 10)
+                    Text(dayTitle(day)).font(.subheadline.weight(.semibold))
+                    Text("\(count)").font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+                if isFirst {
+                    let allCollapsed = collapsedDays.count >= days.count
+                    Button(allCollapsed ? tr("Развернуть все") : tr("Свернуть все")) {
+                        collapsedDays = allCollapsed ? [] : Set(days.map(\.day))
+                    }
+                    .buttonStyle(.plain)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            }
+            if count > DownloadHistory.dayLimit {
+                Text(tr("За этот день больше 100 записей. Можно очистить."))
+                    .font(.caption)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.yellow.opacity(0.14)))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.yellow.opacity(0.5)))
+            }
+        }
+        .padding(.top, 10)
+    }
+
     private func row(_ item: HistoryItem) -> some View {
         Button { onPick(item.url) } label: {
             HStack(spacing: 12) {
                 thumbnail(item)
                 VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Image(systemName: item.isPlaylist ? "list.bullet.rectangle" : (item.audioOnly ? "music.note" : "film"))
+                        if let count = item.playlistCount {
+                            Text(trf("Плейлист · %d видео", count))
+                        } else {
+                            Text(item.audioOnly ? tr("Звук") : tr("Видео"))
+                        }
+                        Text("·")
+                        Text(item.date.formatted(date: .omitted, time: .shortened))
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
                     Text(item.title ?? URL(string: item.url)?.host ?? item.url)
                         .font(.callout.weight(.semibold))
                         .lineLimit(2)
@@ -260,14 +346,6 @@ struct HistoryView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    HStack(spacing: 6) {
-                        Image(systemName: item.audioOnly ? "music.note" : "film")
-                        Text(item.audioOnly ? tr("Звук") : tr("Видео"))
-                        Text("·")
-                        Text(item.date.formatted(date: .abbreviated, time: .shortened))
-                    }
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
             }
@@ -283,13 +361,14 @@ struct HistoryView: View {
     @ViewBuilder
     private func thumbnail(_ item: HistoryItem) -> some View {
         Group {
-            if let url = history.thumbnailURL(for: item), let image = NSImage(contentsOf: url) {
+            if !item.isPlaylist, let url = history.thumbnailURL(for: item), let image = NSImage(contentsOf: url) {
                 Image(nsImage: image).resizable().scaledToFill()
             } else {
-                ZStack {
+                if let url = Bundle.main.url(forResource: "HistoryPlaceholder", withExtension: "png"),
+                   let image = NSImage(contentsOf: url) {
+                    Image(nsImage: image).resizable().scaledToFill()
+                } else {
                     Color.secondary.opacity(0.2)
-                    Image(systemName: item.audioOnly ? "music.note" : "film")
-                        .foregroundStyle(.secondary)
                 }
             }
         }
