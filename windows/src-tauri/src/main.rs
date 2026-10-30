@@ -31,8 +31,9 @@ fn reveal(path: String) {
     }
 }
 
+// Windows are created from async commands: on Windows a synchronous command would freeze the whole program.
 #[tauri::command]
-fn open_window(app: AppHandle, label: String, page: String, title: String, width: f64, height: f64) {
+async fn open_window(app: AppHandle, label: String, page: String, title: String, width: f64, height: f64) {
     use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
     if let Some(w) = app.get_webview_window(&label) {
         let _ = w.show();
@@ -152,7 +153,7 @@ fn install_update(app: AppHandle, installer: String) -> bool {
 
 /// A small browser window where the person signs in to a site; the cookies are kept for yt-dlp when it is closed.
 #[tauri::command]
-fn open_login(app: AppHandle, url: String, title: String) {
+async fn open_login(app: AppHandle, url: String, title: String) {
     use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
     if let Some(w) = app.get_webview_window("login") { let _ = w.set_focus(); return; }
     let Ok(parsed) = url.parse::<tauri::Url>() else { return };
@@ -182,7 +183,7 @@ fn open_in_firefox(url: String) -> bool {
 }
 
 #[tauri::command]
-fn forget_logins(app: AppHandle) {
+async fn forget_logins(app: AppHandle) {
     use tauri::Manager;
     engine::forget_logins();
     if let Some(w) = app.get_webview_window("main") { let _ = w.clear_all_browsing_data(); }
@@ -195,7 +196,7 @@ fn take_crash_report() -> Option<String> { engine::take_crash_report() }
 fn has_logins() -> bool { engine::login_file().exists() }
 
 #[tauri::command]
-fn choose_folder(app: AppHandle, start: String) -> Option<String> {
+async fn choose_folder(app: AppHandle, start: String) -> Option<String> {
     use tauri_plugin_dialog::DialogExt;
     app.dialog().file().set_directory(start).blocking_pick_folder().map(|p| p.to_string())
 }
