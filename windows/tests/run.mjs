@@ -28,6 +28,8 @@ const dataDir = path.join(process.env.APPDATA, 'Scorpena');
 const downloads = path.join(process.env.USERPROFILE, 'Downloads');
 fs.mkdirSync(downloads, { recursive: true });
 
+// WebView2 reads extra browser arguments from this policy key (the program passes its own, so the env variable is ignored)
+try { execFileSync('powershell', ['-NoProfile', '-Command', "New-Item -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge\\WebView2\\AdditionalBrowserArguments' -Force | Out-Null; Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge\\WebView2\\AdditionalBrowserArguments' -Name '*' -Value '--remote-debugging-port=9222'"]); say('policy key set'); } catch (e) { say('policy key failed: ' + e.message); }
 const child = spawn(exe, [], { env: { ...process.env, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: '--remote-debugging-port=9222' }, detached: false, stdio: 'ignore' });
 await sleep(8000);
 let browser;
