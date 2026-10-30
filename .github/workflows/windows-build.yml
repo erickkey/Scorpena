@@ -1,0 +1,39 @@
+name: Windows build
+
+# Builds the Windows installer (Scorpena.exe). Started by hand: Actions → Windows build → Run workflow.
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Telegram secrets (not kept in git)
+        shell: pwsh
+        run: |
+          Set-Content -Path windows/src-tauri/src/secrets.rs -Value @"
+          pub const TELEGRAM_BOT_TOKEN: &str = "${{ secrets.TELEGRAM_BOT_TOKEN }}";
+          pub const TELEGRAM_CHAT_ID: &str = "${{ secrets.TELEGRAM_CHAT_ID }}";
+          "@
+      - name: Tools (yt-dlp, ffmpeg, deno)
+        shell: pwsh
+        run: ./windows/scripts/fetch-tools.ps1
+      - name: Build the installer
+        working-directory: windows
+        run: |
+          npm install
+          npx tauri build
+      - name: Name it Scorpena.exe
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem windows/src-tauri/target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          Copy-Item $setup.FullName Scorpena.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Scorpena-Windows
+          path: Scorpena.exe

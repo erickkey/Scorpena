@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scorpena – video downloader</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="toolbar">
+  <button class="icon-btn" title="Загрузки" id="btn-downloads">
+    <svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>
+  </button>
+  <button class="icon-btn" title="Дополнительно" id="btn-gear">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+  </button>
+  <button class="icon-btn" title="Светлая / тёмная тема" id="btn-theme">
+    <svg id="theme-icon" viewBox="0 0 24 24"></svg>
+  </button>
+</div>
+
+<main>
+  <div class="brand">
+    <img src="logo.png" alt="">
+    <div>
+      <div class="name">SCORPENA <button class="ver" id="ver" title="Список изменений">(v.3.1.1)</button></div>
+      <div class="sub">video downloader</div>
+    </div>
+  </div>
+
+  <div>
+    <div class="urlbox">
+      <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>
+      <input id="url" type="text" placeholder="Вставь ссылку на видео" spellcheck="false" autocomplete="off">
+      <button class="pill" id="go" disabled>Скачать</button>
+    </div>
+    <div class="hint"><span id="hint"></span><span id="probe-title" class="probe"></span></div>
+  </div>
+
+  <div class="formats">
+    <div class="seg-group">Видео
+      <div class="segs" data-kind="video">
+        <button class="seg on">MP4</button><button class="seg">MOV</button><button class="seg">WebM</button><button class="seg">MKV</button>
+      </div>
+    </div>
+    <div class="seg-group">Звук
+      <div class="segs" data-kind="audio">
+        <button class="seg">MP3</button><button class="seg">WAV</button><button class="seg">M4A</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="settings">
+    <label><input type="checkbox"> без звука</label>
+    <span>·</span>
+    <button>Качество: Максимально доступное</button>
+    <span>·</span>
+    <button>Папка: Загрузки</button>
+  </div>
+
+  <div class="progress" id="progress"></div>
+
+  <footer>
+    <div class="links">
+      <a data-win="about">О программе</a><a data-win="legal">Правовая информация</a><a data-win="feedback">Обратная связь</a><a data-win="share">Поделиться</a><a data-win="donate">Поддержать</a>
+    </div>
+    <div class="sig">by Yaroslav Lukyanov</div>
+  </footer>
+</main>
+
+<script>
+  const root = document.documentElement;
+  const sun = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>';
+  const moon = '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>';
+  function setTheme(t) {
+    root.dataset.theme = t;
+    document.getElementById('theme-icon').innerHTML = t === 'dark' ? sun : moon;
+    try { localStorage.setItem('theme', t); } catch (e) {}
+  }
+  let saved = null; try { saved = localStorage.getItem('theme'); } catch (e) {}
+  setTheme(saved || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+  document.getElementById('btn-theme').onclick = () => setTheme(root.dataset.theme === 'dark' ? 'light' : 'dark');
+
+  const known = ['youtube.com','youtu.be','vk.com','vkvideo.ru','instagram.com','tiktok.com','vimeo.com','twitter.com','x.com','facebook.com','twitch.tv','dailymotion.com','rutube.ru'];
+  function parse(s) {
+    s = s.trim(); if (!s) return null;
+    try { return new URL(/^[a-z]+:\/\//i.test(s) ? s : 'https://' + s); } catch (e) { return null; }
+  }
+  window.__parse = parse;
+  function plausible(u) { return !!u && /^[^.\s]+(\.[^.\s]+)*\.[a-z]{2,}$/i.test(u.hostname) && !/\.(mp4|mov|mkv|webm|mp3|pdf|zip)$/i.test(u.hostname); }
+  window.__plausible = plausible;
+  const url = document.getElementById('url'), go = document.getElementById('go'), hint = document.getElementById('hint');
+  url.addEventListener('input', () => {
+    const text = url.value.trim(), u = parse(url.value), ok = plausible(u);
+    go.disabled = !ok;
+    if (!text) { hint.textContent = ''; return; }
+    const host = ok ? u.hostname.replace(/^www\./, '') : '';
+    const homepage = ok && (u.pathname === '/' || u.pathname === '') && !u.search;
+    const isKnown = ok && known.some(k => host === k || host.endsWith('.' + k));
+    const set = (cls, t) => { hint.className = cls; hint.textContent = t; };
+    if (!ok) set('warn', 'Кажется, это не ссылка — проверь, что скопировалось');
+    else if (homepage) set('warn', 'Это главная страница сайта, а не ссылка на видео');
+    else if (isKnown) set('ok', 'Сайт есть в списке поддерживаемых ✅');
+    else set('odd', 'Необычный сайт — программа попробует, но результат не гарантирован');
+  });
+  document.querySelectorAll('.segs').forEach(group => {
+    group.querySelectorAll('.seg').forEach(b => b.onclick = () => {
+      document.querySelectorAll('.seg.on').forEach(x => x.classList.remove('on'));
+      b.classList.add('on');
+    });
+  });
+
+</script>
+<script src="i18n-data.js"></script>
+<script src="i18n.js"></script>
+<script src="texts.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

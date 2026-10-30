@@ -1,0 +1,54 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Scorpena",
+  "version": "3.1.1",
+  "identifier": "com.yaroslavlukyanov.scorpena",
+  "build": {
+    "frontendDist": "../src"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "Scorpena – video downloader",
+        "width": 640,
+        "height": 480,
+        "minWidth": 560,
+        "minHeight": 380
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": {
+      "../tools": "bin"
+    },
+    "publisher": "Yaroslav Lukyanov",
+    "shortDescription": "Scorpena – video downloader",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "Russian",
+          "English"
+        ],
+        "displayLanguageSelector": true,
+        "startMenuFolder": "Scorpena",
+        "installerIcon": "icons/icon.ico"
+      }
+    }
+  }
+}
