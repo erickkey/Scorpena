@@ -19,13 +19,14 @@
   <img src="logo.png" alt="">
   <h1>Выбери язык / Choose your language</h1>
   <div class="opts">
-    <button class="opt" data-l="ru"><span class="flag">🇷🇺</span><span class="nm">Русский</span></button>
-    <button class="opt" data-l="en"><span class="flag">🇺🇸</span><span class="nm">English</span></button>
+    <button class="opt" data-l="ru"><span class="flag" data-flag="ru"></span><span class="nm">Русский</span></button>
+    <button class="opt" data-l="en"><span class="flag" data-flag="en"></span><span class="nm">English</span></button>
   </div>
 <script src="i18n-data.js"></script>
 <script src="i18n.js"></script>
 <script src="common.js"></script>
 <script>
+  document.querySelectorAll('.flag').forEach(f => { f.innerHTML = FLAGS[f.dataset.flag]; const i = f.firstChild; i.setAttribute('width', 42); i.setAttribute('height', 28); i.style.borderRadius = '3px'; i.style.boxShadow = '0 0 0 1px rgba(128,128,128,.35)'; });
   document.querySelectorAll('.opt').forEach(b => b.addEventListener('click', () => { setLanguage(b.dataset.l); cmd('langChosen'); setTimeout(closeMe, 150); }));
 </script>
 </body>

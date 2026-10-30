@@ -178,3 +178,6 @@
   .banner { padding: 12px; border-radius: 8px; background: rgba(255,204,0,.14); border: 1px solid rgba(255,204,0,.5); display: flex; flex-direction: column; gap: 8px; }
   .banner b { font-size: 13px; } .banner span { font-size: 12px; color: var(--secondary); }
   .bar.dlg { margin-top: 4px; }
+
+  .flagimg { vertical-align: -3px; margin-right: 6px; border-radius: 2px; box-shadow: 0 0 0 1px rgba(128,128,128,.35); }
+  .opt .flag .flagimg { margin: 0; vertical-align: top; }

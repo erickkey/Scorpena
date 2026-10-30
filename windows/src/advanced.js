@@ -35,7 +35,7 @@
       ${WINDOWS ? `<div class="card blk"><h3>Входы в аккаунты</h3>
         <div class="small">Когда ты входишь на сайт через «Войти в окне», вход хранится на этом компьютере в зашифрованном виде и доступен только тебе.</div>
         <div class="row-inline"><button class="minibtn" id="forgetLogins">${tr('Забыть входы в аккаунты')}</button>${loginNote ? `<span class="small">${esc(loginNote)}</span>` : ''}</div></div>` : ''}
-      <div class="card blk"><h3>Язык</h3>${seg('lang', [['ru', '🇷🇺 Русский'], ['en', '🇺🇸 English']], LANG())}</div>
+      <div class="card blk"><h3>Язык</h3>${seg('lang', [['ru', FLAGS.ru + ' Русский'], ['en', FLAGS.en + ' English']], LANG())}</div>
       <div class="card blk"><h3>Отчёты о сбоях</h3>
         ${check('diag', 'Отправлять разработчику анонимные отчёты о сбоях', S.sendDiagnostics)}
         <div class="small">Анонимно, без ссылок и личных данных.</div></div>
