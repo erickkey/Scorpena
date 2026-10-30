@@ -1,0 +1,49 @@
+name: Windows test
+
+# Installs the built Scorpena.exe on a Windows machine, drives the real program (shipped build, no test hooks)
+# and saves screenshots, window sizes and a log. Started by hand: Actions → Windows test → Run workflow,
+# with the number of a successful «Windows build» run.
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Number of the Windows build run whose Scorpena.exe to test"
+        required: true
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Get the installer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download ${{ inputs.run_id }} --repo ${{ github.repository }} -n Scorpena-Windows
+      - name: Install silently
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath .\Scorpena.exe -ArgumentList "/S" -Wait -PassThru
+          "installer exit code: $($p.ExitCode)"
+          Get-ChildItem "$env:LOCALAPPDATA\Scorpena","$env:LOCALAPPDATA\Programs\Scorpena" -ErrorAction SilentlyContinue | Format-Table Name, Length
+          "--- Start menu:"; Get-ChildItem "$env:APPDATA\Microsoft\Windows\Start Menu\Programs" -Recurse -Filter *Scorpena* -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+          "--- Desktop:"; Get-ChildItem "$env:USERPROFILE\Desktop","$env:PUBLIC\Desktop" -Filter *Scorpena* -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+      - name: Drive the program
+        shell: pwsh
+        working-directory: windows/tests
+        run: |
+          npm install --no-audit --no-fund puppeteer-core
+          node run.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Scorpena-Windows-test
+          path: windows/tests/out
