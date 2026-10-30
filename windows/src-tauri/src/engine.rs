@@ -132,6 +132,118 @@ pub fn installed_browsers() -> Vec<String> {
     out
 }
 
+/// Cookies saved from the sign-in window. On Windows the file is encrypted with the Windows account of the
+/// person (DPAPI), so it can only be read by that person on that computer.
+pub fn login_file() -> PathBuf { data_dir().join(if cfg!(windows) { "login-cookies.dat" } else { "login-cookies.txt" }) }
+
+#[cfg(windows)]
+mod dpapi {
+    use windows_sys::Win32::Foundation::LocalFree;
+    use windows_sys::Win32::Security::Cryptography::{CryptProtectData, CryptUnprotectData, CRYPT_INTEGER_BLOB};
+
+    fn blob(data: &[u8]) -> CRYPT_INTEGER_BLOB { CRYPT_INTEGER_BLOB { cbData: data.len() as u32, pbData: data.as_ptr() as *mut u8 } }
+    fn take(out: CRYPT_INTEGER_BLOB) -> Vec<u8> {
+        let v = unsafe { std::slice::from_raw_parts(out.pbData, out.cbData as usize).to_vec() };
+        unsafe { LocalFree(out.pbData as _); }
+        v
+    }
+    pub fn protect(data: &[u8]) -> Option<Vec<u8>> {
+        let input = blob(data);
+        let mut out = CRYPT_INTEGER_BLOB { cbData: 0, pbData: std::ptr::null_mut() };
+        let ok = unsafe { CryptProtectData(&input, std::ptr::null(), std::ptr::null(), std::ptr::null(), std::ptr::null(), 0, &mut out) };
+        if ok == 0 { None } else { Some(take(out)) }
+    }
+    pub fn unprotect(data: &[u8]) -> Option<Vec<u8>> {
+        let input = blob(data);
+        let mut out = CRYPT_INTEGER_BLOB { cbData: 0, pbData: std::ptr::null_mut() };
+        let ok = unsafe { CryptUnprotectData(&input, std::ptr::null_mut(), std::ptr::null(), std::ptr::null(), std::ptr::null(), 0, &mut out) };
+        if ok == 0 { None } else { Some(take(out)) }
+    }
+}
+
+fn read_login() -> Option<String> {
+    let raw = std::fs::read(login_file()).ok()?;
+    #[cfg(windows)]
+    let raw = dpapi::unprotect(&raw)?;   // not readable (other account / damaged): the person just signs in again
+    String::from_utf8(raw).ok()
+}
+
+static LOGIN_LOCK: Mutex<()> = Mutex::new(());
+
+fn write_login(text: &str) {
+    let _guard = LOGIN_LOCK.lock();
+    #[cfg(windows)]
+    let Some(bytes) = dpapi::protect(text.as_bytes()) else { return };
+    #[cfg(not(windows))]
+    let bytes = text.as_bytes().to_vec();
+    let _ = std::fs::write(login_file(), bytes);
+}
+
+/// Sources to try after «no cookies»: the sign-in window first, then the installed browsers.
+pub fn cookie_sources() -> Vec<String> {
+    let mut out = vec![];
+    if login_file().exists() { out.push("login".to_string()); }
+    out.extend(installed_browsers());
+    out
+}
+
+/// yt-dlp arguments for one of those sources. For the sign-in window the cookies are decrypted into a
+/// temporary file that exists only while this value lives; afterwards what yt-dlp refreshed is encrypted back.
+pub struct CookieArgs { pub args: Vec<String>, temp: Option<PathBuf> }
+
+impl Drop for CookieArgs {
+    fn drop(&mut self) {
+        if let Some(t) = &self.temp {
+            if let Ok(text) = std::fs::read_to_string(t) { if text.lines().filter(|l| !l.starts_with('#') && l.contains('\t')).count() > 0 { write_login(&text); } }
+            let _ = std::fs::remove_file(t);
+        }
+    }
+}
+
+pub fn cookie_args(source: &str) -> CookieArgs {
+    if source == "login" {
+        static COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let temp = std::env::temp_dir().join(format!("scorpena-login-{}-{n}.txt", std::process::id()));
+        if let Some(text) = read_login() {
+            if std::fs::write(&temp, text).is_ok() {
+                return CookieArgs { args: vec!["--cookies".into(), temp.to_string_lossy().into_owned()], temp: Some(temp) };
+            }
+        }
+        return CookieArgs { args: vec![], temp: None };
+    }
+    CookieArgs { args: vec!["--cookies-from-browser".into(), source.to_string()], temp: None }
+}
+
+/// Merges cookies taken from the sign-in window into the saved file (same domain+path+name is replaced).
+pub fn save_login_cookies(cookies: &[tauri::webview::cookie::Cookie<'static>]) {
+    let mut lines: Vec<(String, String)> = vec![];
+    if let Some(text) = read_login() {
+        for l in text.lines() {
+            let f: Vec<&str> = l.split('\t').collect();
+            if f.len() >= 7 { lines.push((format!("{}\t{}\t{}", f[0].trim_start_matches("#HttpOnly_"), f[2], f[5]), l.to_string())); }
+        }
+    }
+    let soon = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0) + 30 * 86400;
+    for c in cookies {
+        let Some(domain) = c.domain() else { continue };
+        if c.value().is_empty() { continue; }
+        let path_s = c.path().unwrap_or("/");
+        let expiry = c.expires_datetime().map(|t| t.unix_timestamp()).unwrap_or(soon);
+        let line = format!("{}{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            if c.http_only().unwrap_or(false) { "#HttpOnly_" } else { "" }, domain,
+            if domain.starts_with('.') { "TRUE" } else { "FALSE" }, path_s,
+            if c.secure().unwrap_or(false) { "TRUE" } else { "FALSE" }, expiry, c.name(), c.value());
+        let key = format!("{}\t{}\t{}", domain, path_s, c.name());
+        lines.retain(|(k, _)| *k != key);
+        lines.push((key, line));
+    }
+    let body: Vec<String> = lines.into_iter().map(|(_, l)| l).collect();
+    write_login(&format!("# Netscape HTTP Cookie File\n{}\n", body.join("\n")));
+}
+
+pub fn forget_logins() { let _ = std::fs::remove_file(login_file()); }
+
 pub fn js_runtime_args_pub() -> Vec<String> { js_runtime_args() }
 pub fn hide_window(cmd: &mut Command) { no_window(cmd) }
 
@@ -301,7 +413,7 @@ pub fn run_job(app: AppHandle, state: Arc<Running>, job: Job) {
         state.stopped.lock().unwrap().remove(&job.id);
 
         // No cookies first; then the installed browsers.
-        let mut browsers = installed_browsers();
+        let mut browsers = cookie_sources();
         browsers.sort_by_key(|b| job.cookie_order.iter().position(|x| x == b).unwrap_or(usize::MAX));
         if let Some(i) = browsers.iter().position(|b| *b == job.last_cookie) { let good = browsers.remove(i); browsers.insert(0, good); }
         let mut sources: Vec<Option<String>> = vec![None];
@@ -312,12 +424,16 @@ pub fn run_job(app: AppHandle, state: Arc<Running>, job: Job) {
         let mut ok = false;
 
         let mut index = 0;
+        let mut saw_auth = false;
         while index < sources.len() {
             let source = sources[index].clone();
             index += 1;
             let mut args = build_args(&job, &staging, &temp);
+            let mut _cookies = None;   // keeps the decrypted sign-in cookies alive until this attempt is over
             if let Some(browser) = &source {
-                args.extend(["--cookies-from-browser".to_string(), browser.clone()]);
+                let c = cookie_args(browser);
+                args.extend(c.args.clone());
+                _cookies = Some(c);
                 let _ = app.emit("job-attempt", Line { id: job.id.clone(), line: browser.clone() });
             }
             args.push(job.url.clone());
@@ -380,10 +496,11 @@ pub fn run_job(app: AppHandle, state: Arc<Running>, job: Job) {
             }
             let lower = attempt_log.to_lowercase();
             let permission_blocked = lower.contains("operation not permitted") && lower.contains("cookie");
+            if is_auth_wall(&lower) { saw_auth = true; }
             if (is_auth_wall(&lower) || permission_blocked) && index < sources.len() {
                 continue;
             }
-            reason = if is_auth_wall(&lower) { "auth".into() } else { failure_reason(&attempt_log).into() };
+            reason = if is_auth_wall(&lower) || permission_blocked || saw_auth { "auth".into() } else { failure_reason(&attempt_log).into() };
             break;
         }
 
@@ -432,11 +549,9 @@ fn run_info(args: &[String]) -> Option<Vec<u8>> {
 }
 
 /// Cookie choices for reading a link: none first, then the installed browsers.
-fn cookie_sets() -> Vec<Vec<String>> {
-    let mut sets: Vec<Vec<String>> = vec![vec![]];
-    for b in installed_browsers() {
-        sets.push(vec!["--cookies-from-browser".into(), b]);
-    }
+fn cookie_sets() -> Vec<Option<String>> {
+    let mut sets: Vec<Option<String>> = vec![None];
+    sets.extend(cookie_sources().into_iter().map(Some));
     sets
 }
 
@@ -454,10 +569,11 @@ pub struct Quality {
 }
 
 pub fn probe_quality(url: &str) -> Option<Quality> {
-    for cookies in cookie_sets() {
+    for source in cookie_sets() {
+        let cookies = source.as_deref().map(cookie_args);
         let mut args: Vec<String> = vec!["-J".into(), "--no-warnings".into(), "--no-playlist".into(), "--no-progress".into()];
         args.extend(js_runtime_args());
-        args.extend(cookies);
+        if let Some(c) = &cookies { args.extend(c.args.clone()); }
         args.push(url.to_string());
         let Some(data) = run_info(&args) else { continue };
         let Ok(json) = serde_json::from_slice::<serde_json::Value>(&data) else { continue };
@@ -497,10 +613,11 @@ pub struct Entry { url: String, title: Option<String> }
 pub struct PlaylistInfo { title: Option<String>, entries: Vec<Entry>, total: usize }
 
 pub fn fetch_playlist(list_url: &str, limit: usize) -> Option<PlaylistInfo> {
-    for cookies in cookie_sets() {
+    for source in cookie_sets() {
+        let cookies = source.as_deref().map(cookie_args);
         let mut args: Vec<String> = vec!["--flat-playlist".into(), "--no-warnings".into(), "--print".into(), "%(url)s\t%(title)s\t%(playlist_title)s".into()];
         args.extend(js_runtime_args());
-        args.extend(cookies);
+        if let Some(c) = &cookies { args.extend(c.args.clone()); }
         args.push(list_url.to_string());
         let Some(data) = run_info(&args) else { continue };
         let text = String::from_utf8_lossy(&data).to_string();
@@ -605,6 +722,12 @@ pub fn update_tools(app: &AppHandle) -> ToolOutcome {
     if std::fs::rename(&fresh, &live).is_err() {
         let _ = std::fs::rename(&old, &live);
         return outcome("failed", &current, &tag);
+    }
+    // the replaced file must still report the new version, otherwise the old one goes back
+    if ytdlp_version().as_deref() != Some(tag.as_str()) {
+        let _ = std::fs::remove_file(&live);
+        let _ = std::fs::rename(&old, &live);
+        return outcome("keptOld", &current, &tag);
     }
     let _ = std::fs::remove_file(&old);
     outcome("updated", &current, &tag)
@@ -925,4 +1048,29 @@ pub fn install_update(installer: &str) -> bool {
     c.args(["/C", &line]);
     no_window(&mut c);
     c.spawn().is_ok()
+}
+
+// ---------- crash reports: a panic leaves a short summary that is sent on the next start ----------
+
+fn crash_file() -> PathBuf { data_dir().join("last-crash.txt") }
+
+pub fn install_crash_hook() {
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let message = info.payload().downcast_ref::<&str>().map(|s| s.to_string())
+            .or_else(|| info.payload().downcast_ref::<String>().cloned()).unwrap_or_default();
+        let place = info.location().map(|l| format!("{}:{}", l.file().rsplit(['/', '\\']).next().unwrap_or(""), l.line())).unwrap_or_default();
+        let trace = std::backtrace::Backtrace::force_capture().to_string();
+        let frames: Vec<&str> = trace.lines().filter(|l| l.trim_start().starts_with(|c: char| c.is_ascii_digit())).take(10).collect();
+        let text = format!("Сообщение: {}\nМесто: {}\n\nСтек:\n{}", message.chars().take(300).collect::<String>(), place, frames.join("\n"));
+        let _ = std::fs::write(crash_file(), text);
+        previous(info);
+    }));
+}
+
+/// The summary of the previous crash, if there was one (it is deleted once taken).
+pub fn take_crash_report() -> Option<String> {
+    let text = std::fs::read_to_string(crash_file()).ok()?;
+    let _ = std::fs::remove_file(crash_file());
+    Some(text)
 }

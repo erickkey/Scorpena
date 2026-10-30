@@ -5,7 +5,7 @@ mod secrets;
 
 use engine::{Job, Running};
 use std::sync::Arc;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 
 #[tauri::command]
 fn run_job(app: AppHandle, state: State<'_, Arc<Running>>, job: Job) {
@@ -150,6 +150,50 @@ fn install_update(app: AppHandle, installer: String) -> bool {
     ok
 }
 
+/// A small browser window where the person signs in to a site; the cookies are kept for yt-dlp when it is closed.
+#[tauri::command]
+fn open_login(app: AppHandle, url: String, title: String) {
+    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+    if let Some(w) = app.get_webview_window("login") { let _ = w.set_focus(); return; }
+    let Ok(parsed) = url.parse::<tauri::Url>() else { return };
+    if parsed.scheme() != "https" && parsed.scheme() != "http" { return; }
+    let _ = WebviewWindowBuilder::new(&app, "login", WebviewUrl::External(parsed))
+        .title(title).inner_size(480.0, 720.0).center().build();
+}
+
+/// Opens a page in Firefox; if it is not installed, opens the official download page instead.
+/// Returns true when Firefox itself was opened.
+#[tauri::command]
+fn open_in_firefox(url: String) -> bool {
+    if !(url.starts_with("https://") || url.starts_with("http://")) { return false; }
+    let mut paths: Vec<String> = vec![];
+    if cfg!(windows) {
+        for var in ["ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"] {
+            if let Ok(base) = std::env::var(var) { paths.push(format!("{base}\\Mozilla Firefox\\firefox.exe")); }
+        }
+    } else {
+        paths.push("/Applications/Firefox.app/Contents/MacOS/firefox".into());
+    }
+    if let Some(exe) = paths.iter().find(|p| std::path::Path::new(p).exists()) {
+        if std::process::Command::new(exe).arg(&url).spawn().is_ok() { return true; }
+    }
+    open_url("https://www.mozilla.org/firefox/new/".to_string());
+    false
+}
+
+#[tauri::command]
+fn forget_logins(app: AppHandle) {
+    use tauri::Manager;
+    engine::forget_logins();
+    if let Some(w) = app.get_webview_window("main") { let _ = w.clear_all_browsing_data(); }
+}
+
+#[tauri::command]
+fn take_crash_report() -> Option<String> { engine::take_crash_report() }
+
+#[tauri::command]
+fn has_logins() -> bool { engine::login_file().exists() }
+
 #[tauri::command]
 fn choose_folder(app: AppHandle, start: String) -> Option<String> {
     use tauri_plugin_dialog::DialogExt;
@@ -157,6 +201,7 @@ fn choose_folder(app: AppHandle, start: String) -> Option<String> {
 }
 
 fn main() {
+    engine::install_crash_hook();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -164,6 +209,20 @@ fn main() {
         .on_window_event(|window, event| {
             use tauri::Manager;
             // Closing the main window closes the whole program, like on the Mac.
+            if window.label() == "login" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    // the cookies are read on another thread (on Windows asking from the main one would hang)
+                    api.prevent_close();
+                    let app = window.app_handle().clone();
+                    std::thread::spawn(move || {
+                        if let Some(w) = app.get_webview_window("login") {
+                            if let Ok(cookies) = w.cookies() { engine::save_login_cookies(&cookies); }
+                            let _ = w.destroy();
+                        }
+                        let _ = app.emit("login-closed", ());
+                    });
+                }
+            }
             if window.label() == "main" {
                 if let tauri::WindowEvent::Destroyed = event {
                     if let Some(state) = window.app_handle().try_state::<Arc<Running>>() { engine::stop_all(state.inner()); }
@@ -172,7 +231,9 @@ fn main() {
             }
         })
         .setup(|app| {
-            // DEV-TEST-HOOK (remove before shipping): SCORPENA_AUTOTEST="<url>[ <url>...]" adds links as if pasted.
+            // DEV-TEST-HOOK (debug builds only, not in the shipped release): SCORPENA_AUTOTEST="<url>[ <url>...]" adds links as if pasted.
+            #[cfg(debug_assertions)]
+            {
             if let Ok(links) = std::env::var("SCORPENA_AUTOTEST") {
                 use tauri::Manager;
                 let win = app.get_webview_window("main").unwrap();
@@ -189,11 +250,16 @@ fn main() {
                         std::thread::sleep(std::time::Duration::from_secs(4));
                         let _ = win.eval(&extra);
                     }
+                    if let Ok(secs) = std::env::var("SCORPENA_CLOSELOGIN") {
+                        std::thread::sleep(std::time::Duration::from_secs(secs.parse().unwrap_or(30)));
+                        if let Some(w) = win.app_handle().get_webview_window("login") { let _ = w.close(); }
+                    }
                 });
+            }
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![run_job, stop_job, default_folder, choose_folder, reveal, open_window, fetch_preview, probe_quality, fetch_playlist, make_folder, send_telegram, open_url, tools_version, update_tools, stale_partials, remove_partials, environment_line, check_bundled_tools, cookie_preflight, download_update, install_update])
+        .invoke_handler(tauri::generate_handler![run_job, stop_job, default_folder, choose_folder, reveal, open_window, fetch_preview, probe_quality, fetch_playlist, make_folder, send_telegram, open_url, tools_version, update_tools, stale_partials, remove_partials, environment_line, check_bundled_tools, cookie_preflight, open_login, open_in_firefox, forget_logins, has_logins, take_crash_report, download_update, install_update])
         .run(tauri::generate_context!())
         .expect("error while running Scorpena");
 }

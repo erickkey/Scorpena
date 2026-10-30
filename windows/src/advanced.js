@@ -12,6 +12,8 @@
   const seg = (name, options, selected) => `<div class="segs" data-seg="${name}">${options.map(([id, t]) => `<button class="seg ${id === selected ? 'on' : ''}" data-v="${id}">${t}</button>`).join('')}</div>`;
   const check = (key, label, on) => `<label class="checkrow"><input type="checkbox" data-check="${key}" ${on ? 'checked' : ''}>${label}</label>`;
 
+  const WINDOWS = /Windows/i.test(navigator.userAgent) || localStorage.getItem('forceWin') === '1';
+  let loginNote = '';
   function render() {
     const keep = content.scrollTop;
     content.innerHTML = `<div class="adv">
@@ -30,6 +32,9 @@
         <div class="row-inline"><button class="minibtn" id="checkTools" ${busy || tools.checking ? 'disabled' : ''}>${tools.checking ? tr('Проверяю…') : tr('Проверить сейчас')}</button>
           ${tools.version ? `<span class="small">yt-dlp ${esc(tools.version)}</span>` : ''}</div>
         ${tools.status ? `<div class="small" style="white-space:pre-line">${esc(tools.status)}</div>` : ''}</div>
+      ${WINDOWS ? `<div class="card blk"><h3>Входы в аккаунты</h3>
+        <div class="small">Когда ты входишь на сайт через «Войти в окне», вход хранится на этом компьютере в зашифрованном виде и доступен только тебе.</div>
+        <div class="row-inline"><button class="minibtn" id="forgetLogins">${tr('Забыть входы в аккаунты')}</button>${loginNote ? `<span class="small">${esc(loginNote)}</span>` : ''}</div></div>` : ''}
       <div class="card blk"><h3>Язык</h3>${seg('lang', [['ru', '🇷🇺 Русский'], ['en', '🇺🇸 English']], LANG())}</div>
       <div class="card blk"><h3>Отчёты о сбоях</h3>
         ${check('diag', 'Отправлять разработчику анонимные отчёты о сбоях', S.sendDiagnostics)}
@@ -54,6 +59,7 @@
       else if (kind === 'lang') setLanguage(b.dataset.v);
       return;
     }
+    if (e.target.id === 'forgetLogins') { await tauri.core.invoke('forget_logins'); loginNote = tr('Входы удалены'); render(); }
     if (e.target.id === 'cleanNow') { cleanupNote = ''; cmd('cleanNow'); }
     if (e.target.id === 'checkTools' && !busy) {
       tools.checking = true; tools.status = ''; const start = Date.now(); let stage = 1; render();
@@ -74,7 +80,7 @@
   });
   document.getElementById('close').addEventListener('click', closeMe);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMe(); });
-  window.addEventListener('storage', (e) => { if (e.key === 'settings') { S = load(); render(); } });
+  window.addEventListener('storage', (e) => { if (e.key === 'settings') { if (document.activeElement && document.activeElement.id === 'speed') return; S = load(); render(); } });
   tauri.event.listen('snapshot', (e) => { const b = e.payload.running.length > 0; if (b !== busy) { busy = b; render(); } });
   tauri.event.listen('cleanup-result', (e) => { cleanupNote = e.payload ? '' : 'Чистить пока нечего.'; render(); });
   tauri.core.invoke('tools_version').then(v => { tools.version = v; render(); });

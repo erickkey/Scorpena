@@ -38,6 +38,15 @@
   }
 
   // ---------- messages ----------
+  const WIN = /Windows/i.test(navigator.userAgent) || localStorage.getItem('forceWin') === '1';
+  const AUTH_WIN = 'Для скачивания требуется вход в аккаунт.\n\nСайт отдаёт это видео только авторизованным пользователям. Chrome и Edge не разрешают другим программам читать их куки, поэтому программа не может ими воспользоваться. Есть два выхода:\n\n1. Firefox. Нажми «Открыть в Firefox» и войди в аккаунт на сайте. Потом вернись сюда и нажми «Повторить»: программа увидит вход и скачает видео.\n\n2. Окно входа. Нажми «Войти в окне» и войди на сайт в открывшемся окне. Закрой его, и скачивание начнётся само. Подойдёт, если Firefox не установлен.';
+  const AUTH_GOOGLE = 'Если Google не пускает во встроенное окно, войди через Firefox (способ 1).';
+  const isGoogleSite = (u) => /(^|\.)(youtube\.com|youtu\.be|google\.com)$/.test(host(u));
+  const loginPage = (u) => { const h = host(u);
+    if (/(^|\.)(youtube\.com|youtu\.be)$/.test(h)) return 'https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fwww.youtube.com%2F';
+    if (/instagram\.com$/.test(h)) return 'https://www.instagram.com/accounts/login/';
+    if (/vimeo\.com$/.test(h)) return 'https://vimeo.com/log_in';
+    return u; };
   const MESSAGES = {
     auth: 'Для скачивания требуется вход в аккаунт:\n\nСайт отдаёт это видео только при входе в аккаунт. Войди на сайт в браузере и повтори. Например, Vimeo сейчас требует вход почти для всех роликов, даже открытых.',
     unavailable: 'Видео недоступно (удалено, приватное или заблокировано в твоём регионе).',
@@ -143,7 +152,8 @@
     else if (d.ok && d.note === 'h264') okNote = tr('Готово ✅ (перекодировано в H.264)');
     else if (d.ok && d.note === 'no-ffmpeg') okNote = tr('Готово ✅ (кодек не H.264 — ffmpeg недоступен)');
     else if (d.ok && d.note === 'h264-failed') { d = { ...d, ok: false, reason: 'h264', kept: true }; }
-    const note = d.ok ? okNote : (d.reason === 'h264' ? trf('Видео скачано (%@), но перекодировать в H.264 не удалось. Файл остался в исходном кодеке.', fileName) : tr(MESSAGES[d.reason] || MESSAGES.other));
+    const authWin = !d.ok && d.reason === 'auth' && WIN;
+    const note = authWin ? tr(AUTH_WIN) + (isGoogleSite(job.item.url) ? '\n\n' + tr(AUTH_GOOGLE) : '') : d.ok ? okNote : (d.reason === 'h264' ? trf('Видео скачано (%@), но перекодировать в H.264 не удалось. Файл остался в исходном кодеке.', fileName) : tr(MESSAGES[d.reason] || MESSAGES.other));
     const pv = previews[id] || {};
     const shownTitle = pv.title || d.name || host(job.item.url);
     finished.unshift({ id, title: shownTitle, sub: host(job.item.url) + ' – ' + fmtTitle(job.item), thumb: pv.thumb || '', url: job.item.url, ok: d.ok, note, file: d.file || null });
@@ -169,7 +179,7 @@
     if (running.length === 0 && waiting.length === 0) {
       single = d.ok
         ? { message: okNote + ' · ' + formatDuration(Date.now() - job.started), failed: false, file: d.file || null }
-        : { message: note, failed: true, file: d.kept ? (d.file || null) : null, log: d.logTail || '', url: job.item.url, reportStatus: 'idle' };
+        : { message: note, failed: true, file: d.kept ? (d.file || null) : null, log: d.logTail || '', url: job.item.url, reportStatus: 'idle', authWin, item: job.item };
     }
     pump();
   }
@@ -206,10 +216,11 @@
     tauri.event.listen('job-attempt', (e) => {
       const p = e.payload, job = running.find(r => r.item.id === p.id);
       if (!job || job.paused) return;
-      const name = p.line.charAt(0).toUpperCase() + p.line.slice(1);
+      const name = p.line === 'login' ? tr('окна входа') : p.line.charAt(0).toUpperCase() + p.line.slice(1);
       job.status = trf('Нужен вход — пробую %@…', trf('cookies из %@', name)); render();
     });
     tauri.event.listen('job-done', (e) => finish(e.payload.id, e.payload));
+    tauri.event.listen('login-closed', () => { if (single.failed && single.authWin) retryFailed(); });
   }
 
   // ---------- rendering of the main window ----------
@@ -236,6 +247,7 @@
         ${first && first.status === tr('Скачивание сейчас начнётся…') ? `<div class="tiny wrap">${esc(tr('Программа запрашивает у сайта данные о видео: адреса потоков и способ обхода защиты. Обычно 2–10 секунд.'))}</div>` : ''}
         ${first && first.fragmented && first.slowSite ? `<div class="tiny wrap">${esc(tr('Сайт отдаёт видео множеством мелких кусков, а не одним файлом — их приходится качать по очереди, поэтому медленнее обычного. У Vimeo почти всегда так.'))}</div>` : ''}
         ${!first && single.failed ? `<div class="err">${esc(single.message)}</div>
+          ${single.authWin ? `<div class="prow" style="gap:8px"><button class="soft sm" data-act="firefox">${esc(tr('Открыть в Firefox'))}</button><button class="soft sm" data-act="login">${esc(tr('Войти в окне'))}</button><button class="soft sm" data-act="retry">${esc(tr('Повторить'))}</button></div>` : ''}
           <div class="prow" style="gap:8px"><button class="soft sm" data-act="report" ${single.reportStatus === 'sending' || single.reportStatus === 'sent' ? 'disabled' : ''}>${single.reportStatus === 'sending' ? '…' : esc(tr('Сообщить об ошибке'))}</button>
           ${single.reportStatus === 'sent' ? `<span class="tiny" style="color:var(--green)">${esc(trf('Отправлено (обращение №%@) — спасибо!', single.reportNumber))}</span>` : ''}
           ${single.reportStatus === 'failed' ? `<span class="tiny">${esc(tr('Не удалось отправить — текст скопирован, отправь вручную в Telegram'))}</span>` : ''}</div>` : ''}`;
@@ -255,7 +267,15 @@
     else if (act === 'reveal' && single.file) tauri.core.invoke('reveal', { path: single.file });
     else if (act === 'queue') window.dispatchEvent(new CustomEvent('open-downloads'));
     else if (act === 'report') reportError();
+    else if (act === 'firefox' && single.url) tauri.core.invoke('open_in_firefox', { url: single.url });
+    else if (act === 'login' && single.url) tauri.core.invoke('open_login', { url: loginPage(single.url), title: tr('Вход в аккаунт') });
+    else if (act === 'retry') retryFailed();
   });
+  function retryFailed() {
+    if (!single.failed || !single.item) return;
+    const item = { ...single.item, id: uid() };
+    submit(item);
+  }
 
   // ---------- the «Загрузки» window ----------
   let emitTimer = null;
@@ -495,7 +515,7 @@
   const chime = () => { if (!settings.muteChime) playSound(voiceFile()); };
 
   // ---------- anonymous reports about breakage (never links or file names) ----------
-  const KIND = { toolBroken: 'встроенный инструмент не работает', repeated: 'скачивание не удаётся несколько раз подряд' };
+  const KIND = { crash: 'приложение аварийно закрылось', toolBroken: 'встроенный инструмент не работает', repeated: 'скачивание не удаётся несколько раз подряд' };
   async function diagReport(kind, details) {
     if (!settings.sendDiagnostics) return;
     const sent = load('diagSent', {}), now = Date.now();
@@ -669,6 +689,7 @@
   }
   async function afterLaunchChecks() {
     checkForUpdate(); showUpdateResult();
+    tauri.core.invoke('take_crash_report').then(t => { if (t) diagReport(KIND.crash, t); });
     tauri.core.invoke('check_bundled_tools').then(p => { if (p.length) { diagReport(KIND.toolBroken, p.join('\n')); if (p.some(x => x.includes('файла нет'))) showMissingTools(); } });
     if (!settings.cookiePreflightDone) setTimeout(async () => { try { settings.cookieOrder = await tauri.core.invoke('cookie_preflight'); settings.cookiePreflightDone = true; persist(); } catch (e) {} }, 4000);
     setTimeout(async () => {   // the daily update of yt-dlp: only when nothing is going on
