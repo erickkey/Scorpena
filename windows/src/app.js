@@ -10,7 +10,7 @@
   const load = (key, fallback) => { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch (e) { return fallback; } };
   const save = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {} };
 
-  const settings = Object.assign({ muteChime: false, chimeVoice: 'female', muteLaunchSound: false, cleanupReminder: 'weekly', sendDiagnostics: true, lastCleanupCheck: 0, videoFormat: 'mp4', audioFormat: 'mp3', mode: 'video', stripAudio: false, quality: 0, folder: null, limitStep: 9 },
+  const settings = Object.assign({ cookieOrder: [], lastCookie: '', cookiePreflightDone: false, lastToolCheck: 0, muteChime: false, chimeVoice: 'female', muteLaunchSound: false, cleanupReminder: 'weekly', sendDiagnostics: true, lastCleanupCheck: 0, videoFormat: 'mp4', audioFormat: 'mp3', mode: 'video', stripAudio: false, quality: 0, folder: null, limitStep: 9 },
     load('settings', {}));
   const LIMIT_STEPS = [5, 10, 20, 30, 50, 75, 100, 150, 200, 0]; // Mbit/s, 0 = no limit
   const limitKbit = () => (LIMIT_STEPS[settings.limitStep] || 0) * 1000;
@@ -50,6 +50,7 @@
   };
   const fmtTitle = (it) => (it.audio ? it.audioFormat : it.videoFormat).toUpperCase().replace('WEBM', 'WebM');
   const elapsed = (ms) => { const t = Math.max(0, Math.floor(ms / 1000)); return t < 60 ? t + ' ' + tr('с') : Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
+  const formatDuration = (ms) => { const t = Math.round(ms / 1000); return t < 60 ? trf('%d с', t) : trf('%d мин %d с', Math.floor(t / 60), t % 60); };
   const host = (u) => { try { return new URL(u).host.replace(/^www\./, ''); } catch (e) { return u; } };
 
   // ---------- queue ----------
@@ -90,7 +91,7 @@
   function pump() {
     while (running.length < MAX_PARALLEL && waiting.length) {
       const item = waiting.shift();
-      const job = { item, percent: 0, status: tr('Скачивание сейчас начнётся…'), paused: false, canPause: false, started: Date.now() };
+      const job = { slowSite: /vimeo\./i.test(item.url), item, percent: 0, status: tr('Скачивание сейчас начнётся…'), paused: false, canPause: false, started: Date.now() };
       running.push(job);
       if (item.startPaused) { delete item.startPaused; job.paused = true; job.status = tr('Пауза — нажми «Продолжить»'); }
       else launch(job);
@@ -103,7 +104,8 @@
     job.paused = false; job.canPause = false;
     const it = job.item;
     tauri.core.invoke('run_job', { job: { id: it.id, url: it.url, dest: it.dest, maxHeight: it.maxHeight || null,
-      audio: it.audio, stripAudio: it.stripAudio, videoFormat: it.videoFormat, audioFormat: it.audioFormat, limitKbit: limitKbit() } })
+      audio: it.audio, stripAudio: it.stripAudio, videoFormat: it.videoFormat, audioFormat: it.audioFormat, limitKbit: limitKbit(),
+      cookieOrder: settings.cookieOrder || [], lastCookie: settings.lastCookie || '' } })
       .catch(err => finish(it.id, { ok: false, reason: 'other', logTail: String(err) }));
   }
 
@@ -134,7 +136,14 @@
     if (!job) return;
     running = running.filter(r => r.item.id !== id);
     const title = d.name || host(job.item.url);
-    const note = d.ok ? tr('Готово ✅') : tr(MESSAGES[d.reason] || MESSAGES.other);
+    if (d.ok && d.cookie !== undefined) { settings.lastCookie = d.cookie; }
+    const fileName = d.name || '';
+    let okNote = tr('Готово ✅');
+    if (d.ok && job.item.audio) okNote = trf('Готово ✅ (%@)', fmtTitle(job.item));
+    else if (d.ok && d.note === 'h264') okNote = tr('Готово ✅ (перекодировано в H.264)');
+    else if (d.ok && d.note === 'no-ffmpeg') okNote = tr('Готово ✅ (кодек не H.264 — ffmpeg недоступен)');
+    else if (d.ok && d.note === 'h264-failed') { d = { ...d, ok: false, reason: 'h264', kept: true }; }
+    const note = d.ok ? okNote : (d.reason === 'h264' ? trf('Видео скачано (%@), но перекодировать в H.264 не удалось. Файл остался в исходном кодеке.', fileName) : tr(MESSAGES[d.reason] || MESSAGES.other));
     const pv = previews[id] || {};
     const shownTitle = pv.title || d.name || host(job.item.url);
     finished.unshift({ id, title: shownTitle, sub: host(job.item.url) + ' – ' + fmtTitle(job.item), thumb: pv.thumb || '', url: job.item.url, ok: d.ok, note, file: d.file || null });
@@ -159,8 +168,8 @@
     if (d.ok) batchDone += 1; else batchTotal = Math.max(0, batchTotal - 1);
     if (running.length === 0 && waiting.length === 0) {
       single = d.ok
-        ? { message: (job.item.audio ? trf('Готово ✅ (%@)', fmtTitle(job.item)) : tr('Готово ✅')) + ' · ' + elapsed(Date.now() - job.started), failed: false, file: d.file || null }
-        : { message: note, failed: true, file: null, log: d.logTail || '', url: job.item.url, reportStatus: 'idle' };
+        ? { message: okNote + ' · ' + formatDuration(Date.now() - job.started), failed: false, file: d.file || null }
+        : { message: note, failed: true, file: d.kept ? (d.file || null) : null, log: d.logTail || '', url: job.item.url, reportStatus: 'idle' };
     }
     pump();
   }
@@ -177,12 +186,28 @@
     tauri.event.listen('job-line', (e) => {
       const p = e.payload, job = running.find(r => r.item.id === p.id), l = p.line;
       if (!job || job.paused) return;
+      if (l.toLowerCase().startsWith('[vimeo')) job.slowSite = true;
+      if (/total fragments/i.test(l)) job.fragmented = true;
       if (l.includes('Retrying') || l.includes('Got error')) job.status = tr('Нет связи — жду и продолжу сам…');
       else if (l.includes('[ExtractAudio]')) { job.canPause = false; job.status = trf('Конвертация в %@…', fmtTitle(job.item)); }
       else if (l.includes('[Merger]')) { job.canPause = false; job.status = tr('Объединение видео и звука…'); }
       else if (/\[(VideoRemuxer|VideoConvertor|Recode)\]/.test(l)) { job.canPause = false; job.status = trf('Упаковка в %@…', fmtTitle(job.item)); }
       else if (l.includes('Destination:')) job.status = job.item.audio ? tr('Скачивание аудио…') : tr('Скачивание…');
       render();
+    });
+    tauri.event.listen('job-phase', (e) => {
+      const p = e.payload, job = running.find(r => r.item.id === p.id);
+      if (!job || job.paused) return;
+      job.canPause = false;
+      if (p.phase === 'check') { job.percent = 1; job.status = tr('Проверка кодека…'); }
+      else { job.percent = p.percent; job.status = trf('Перекодирование в H.264… %d%%', Math.round(p.percent * 100)); }
+      render();
+    });
+    tauri.event.listen('job-attempt', (e) => {
+      const p = e.payload, job = running.find(r => r.item.id === p.id);
+      if (!job || job.paused) return;
+      const name = p.line.charAt(0).toUpperCase() + p.line.slice(1);
+      job.status = trf('Нужен вход — пробую %@…', trf('cookies из %@', name)); render();
     });
     tauri.event.listen('job-done', (e) => finish(e.payload.id, e.payload));
   }
@@ -208,6 +233,8 @@
           <button data-act="cancel" data-id="${first ? first.item.id : ''}" ${first ? '' : 'disabled'}>Отменить</button>
           <button data-act="reveal" ${single.file && !first ? '' : 'disabled'}>Показать файл</button></div>
         ${first && !first.paused ? `<div class="tiny">${Math.floor((Date.now() - first.started) / 1000)} ${tr('с')}</div>` : ''}
+        ${first && first.status === tr('Скачивание сейчас начнётся…') ? `<div class="tiny wrap">${esc(tr('Программа запрашивает у сайта данные о видео: адреса потоков и способ обхода защиты. Обычно 2–10 секунд.'))}</div>` : ''}
+        ${first && first.fragmented && first.slowSite ? `<div class="tiny wrap">${esc(tr('Сайт отдаёт видео множеством мелких кусков, а не одним файлом — их приходится качать по очереди, поэтому медленнее обычного. У Vimeo почти всегда так.'))}</div>` : ''}
         ${!first && single.failed ? `<div class="err">${esc(single.message)}</div>
           <div class="prow" style="gap:8px"><button class="soft sm" data-act="report" ${single.reportStatus === 'sending' || single.reportStatus === 'sent' ? 'disabled' : ''}>${single.reportStatus === 'sending' ? '…' : esc(tr('Сообщить об ошибке'))}</button>
           ${single.reportStatus === 'sent' ? `<span class="tiny" style="color:var(--green)">${esc(trf('Отправлено (обращение №%@) — спасибо!', single.reportNumber))}</span>` : ''}
@@ -570,6 +597,97 @@
     if (c.type === 'cleanNow') runCleanup(true);
   });
 
+  // ---------- closing the program while something downloads ----------
+  if (tauri && tauri.window) tauri.window.getCurrentWindow().onCloseRequested(async (ev) => {
+    if (!running.length && !waiting.length) return;
+    ev.preventDefault();
+    const c = await dialog({ title: 'Идёт скачивание', message: 'Если закрыть программу сейчас, скачивание остановится. Оно продолжится, когда ты откроешь программу снова.',
+      buttons: [{ label: 'Всё равно закрыть', value: 'quit' }, { label: 'Остаться', value: 'stay', primary: true }] });
+    if (c === 'quit') { persist(); await tauri.window.getCurrentWindow().destroy(); }
+  });
+
+  // ---------- updating the program (the red «Доступно обновление») ----------
+  const updLink = $('upd');
+  let latestVersion = null, updating = false;
+  const isNewer = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < Math.max(x.length, y.length); i++) { const p = x[i] || 0, q = y[i] || 0; if (p !== q) return p > q; } return false; };
+  async function checkForUpdate() {
+    try {
+      const r = await fetch('https://raw.githubusercontent.com/erickkey/Scorpena/main/version.json?t=' + Math.floor(Date.now() / 1000), { cache: 'no-store' });
+      const j = await r.json();
+      if (j.version && isNewer(j.version, VERSION)) { latestVersion = j.version; updLink.hidden = false; updLink.textContent = tr('Доступно обновление') + ' (' + j.version + ')'; }
+    } catch (e) {}
+  }
+  function updatePanel({ title, detail, buttons, progress }) {
+    document.querySelectorAll('.modal-bg.upd-panel').forEach(n => n.remove());
+    const wrap = document.createElement('div'); wrap.className = 'modal-bg upd-panel';
+    wrap.innerHTML = `<div class="modal wide"><img src="logo.png" alt="" style="width:56px;height:56px;margin:0 auto"><div class="mt">${esc(title)}</div>
+      ${detail ? `<div class="mm" style="white-space:pre-line">${esc(detail)}</div>` : ''}
+      ${progress === undefined ? '' : `<div class="bar dlg ${progress === null ? 'busy' : ''}"><i style="width:${(progress || 0) * 100}%"></i></div>`}<div class="mb"></div></div>`;
+    (buttons || []).forEach(b => { const el = document.createElement('button'); el.className = b.primary ? 'pill' : 'soft'; el.style.minWidth = '96px'; el.textContent = b.label; el.onclick = b.f; wrap.querySelector('.mb').appendChild(el); });
+    document.body.appendChild(wrap); return wrap;
+  }
+  const closeUpd = () => document.querySelectorAll('.modal-bg.upd-panel').forEach(n => n.remove());
+  function startUpdate() {
+    if (updating || !latestVersion) return;
+    if (running.length) { updatePanel({ title: tr('Сейчас идёт скачивание'), detail: tr('Дождись окончания скачивания и нажми кнопку обновления ещё раз.'), buttons: [{ label: tr('Понятно'), primary: true, f: closeUpd }] }); return; }
+    updatePanel({ title: trf('Вышла новая версия %@', latestVersion), detail: tr('Обновимся прямо сейчас? Займёт около минуты, программа сама перезапустится. Настройки и история сохранятся.'),
+      buttons: [{ label: tr('Позже'), f: closeUpd }, { label: tr('Обновить'), primary: true, f: () => beginInstall(latestVersion) }] });
+  }
+  async function beginInstall(version) {
+    updating = true; updLink.classList.add('busy');
+    const failed = (reason) => { updating = false; updLink.classList.remove('busy');
+      updatePanel({ title: tr('Обновиться не получилось'), detail: reason + '\n' + tr('Ничего не сломалось: осталась прежняя версия.'),
+        buttons: [{ label: tr('Закрыть'), f: closeUpd }, { label: tr('Скачать вручную'), primary: true, f: () => { tauri.core.invoke('open_url', { url: WIN_URL }); closeUpd(); } }] }); };
+    const panel = updatePanel({ title: tr('Загружаю новую версию…'), detail: '0%', progress: 0 });
+    const un = await tauri.event.listen('update-progress', (e) => { const f = e.payload; const d = panel.querySelector('.mm'); if (d) d.textContent = Math.round(f * 100) + '%'; const i = panel.querySelector('.bar i'); if (i) i.style.width = f * 100 + '%'; });
+    let path;
+    try { path = await tauri.core.invoke('download_update'); } catch (err) { un(); return failed(String(err)); }
+    un();
+    updatePanel({ title: tr('Проверяю загрузку…'), detail: tr('Убеждаюсь, что всё скачалось без повреждений.'), progress: null });
+    await new Promise(r => setTimeout(r, 800));
+    updatePanel({ title: tr('Ставлю обновление…'), detail: tr('Сейчас программа перезапустится.'), progress: null });
+    try { localStorage.setItem('pendingAppUpdateVersion', version); } catch (e) {}
+    persist();
+    const ok = await tauri.core.invoke('install_update', { installer: path });
+    if (!ok) failed('');
+  }
+  updLink.addEventListener('click', startUpdate);
+  function showUpdateResult() {   // after the program has restarted into the new version
+    let target = null; try { target = localStorage.getItem('pendingAppUpdateVersion'); localStorage.removeItem('pendingAppUpdateVersion'); } catch (e) {}
+    if (!target) return;
+    if (target === VERSION) updatePanel({ title: trf('Готово! Теперь у тебя версия %@ ✅', VERSION), buttons: [{ label: tr('Отлично'), primary: true, f: closeUpd }] });
+    else { updatePanel({ title: tr('Обновиться не получилось'), detail: tr('Новая версия не запустилась, поэтому вернули прежнюю. Ничего не сломалось — можно скачать новую вручную.'),
+      buttons: [{ label: tr('Закрыть'), f: closeUpd }, { label: tr('Скачать вручную'), primary: true, f: () => { tauri.core.invoke('open_url', { url: WIN_URL }); closeUpd(); } }] });
+      diagReport('новая версия не запустилась, вернули прежнюю', `Ставили версию ${target}, запущена ${VERSION}.`); }
+  }
+
+  // ---------- missing tools, the first-launch login check, the daily tool update ----------
+  function showMissingTools() {
+    $('banner').innerHTML = `<div class="banner"><b>${esc(tr('Внутри программы не хватает файлов'))}</b><span>${esc(tr('Скачай Scorpena заново: все файлы встанут на место, настройки и история сохранятся.'))}</span>
+      <div><button class="soft sm" id="getApp">${esc(tr('Открыть страницу загрузки'))}</button></div></div>`;
+    $('getApp').onclick = () => tauri.core.invoke('open_url', { url: WIN_URL });
+  }
+  async function afterLaunchChecks() {
+    checkForUpdate(); showUpdateResult();
+    tauri.core.invoke('check_bundled_tools').then(p => { if (p.length) { diagReport(KIND.toolBroken, p.join('\n')); if (p.some(x => x.includes('файла нет'))) showMissingTools(); } });
+    if (!settings.cookiePreflightDone) setTimeout(async () => { try { settings.cookieOrder = await tauri.core.invoke('cookie_preflight'); settings.cookiePreflightDone = true; persist(); } catch (e) {} }, 4000);
+    setTimeout(async () => {   // the daily update of yt-dlp: only when nothing is going on
+      if (running.length || probe.busy || Date.now() - (settings.lastToolCheck || 0) < 20 * 3600e3) return;
+      settings.lastToolCheck = Date.now(); persist();
+      try { await tauri.core.invoke('update_tools'); } catch (e) {}
+    }, 8000);
+  }
+
+  // ---------- the window follows the height of its content ----------
+  function fitWindow() {
+    if (!tauri || !tauri.window || !tauri.dpi) return;
+    const main = document.querySelector('main'); if (!main) return;
+    const h = Math.min(900, Math.max(400, Math.ceil(main.getBoundingClientRect().height) + 64));
+    if (Math.abs(h - innerHeight) < 4) return;
+    try { tauri.window.getCurrentWindow().setSize(new tauri.dpi.LogicalSize(innerWidth, h)); } catch (e) {}
+  }
+  if (window.ResizeObserver) new ResizeObserver(() => fitWindow()).observe(document.querySelector('main'));
+
   window.addEventListener('langchange', () => {
     if (folder) { folderBtn.textContent = tr('Папка:') + ' ' + folderName(); }
     renderQuality(); lastKey = ''; render();
@@ -589,7 +707,7 @@
       cleanupOnLaunch();
       // «Что нового»: shown once per version, until the user presses the button
       if (CHANGELOG[VERSION] && settings.lastSeenChangelog !== VERSION) setTimeout(() => openWin('whatsnew', '?v=' + VERSION), 600);
-      tauri.core.invoke('check_bundled_tools').then(p => { if (p.length) diagReport(KIND.toolBroken, p.join('\n')); });
+      afterLaunchChecks();
     };
     // first launch: the language comes first
     if (languageChosen()) proceed(); else { openWin('lang'); window.__afterLang = proceed; }

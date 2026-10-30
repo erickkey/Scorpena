@@ -170,3 +170,11 @@
   .minibtn:disabled { color: var(--secondary); opacity: .6; cursor: default; }
   .adv { display: flex; flex-direction: column; gap: 12px; }
   .soft.sm { padding: 5px 10px; font-size: 12px; border-radius: 7px; }
+  .tiny.wrap { white-space: normal; }
+  footer .sig { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+  .upd { font-size: 10px; font-weight: 700; cursor: pointer; animation: pulse 3.2s ease-in-out infinite; color: var(--red); }
+  .upd.busy { animation: none; color: var(--secondary); cursor: default; }
+  @keyframes pulse { 0%, 100% { color: var(--red); } 50% { color: var(--secondary); } }
+  .banner { padding: 12px; border-radius: 8px; background: rgba(255,204,0,.14); border: 1px solid rgba(255,204,0,.5); display: flex; flex-direction: column; gap: 8px; }
+  .banner b { font-size: 13px; } .banner span { font-size: 12px; color: var(--secondary); }
+  .bar.dlg { margin-top: 4px; }

@@ -133,6 +133,24 @@ async fn check_bundled_tools() -> Vec<String> {
 }
 
 #[tauri::command]
+async fn cookie_preflight() -> Vec<String> {
+    engine::cookie_preflight()
+}
+
+#[tauri::command]
+async fn download_update(app: AppHandle) -> Result<String, String> {
+    engine::download_update(&app)
+}
+
+/// Starts the installer and closes the program so it can replace the files.
+#[tauri::command]
+fn install_update(app: AppHandle, installer: String) -> bool {
+    let ok = engine::install_update(&installer);
+    if ok { app.exit(0); }
+    ok
+}
+
+#[tauri::command]
 fn choose_folder(app: AppHandle, start: String) -> Option<String> {
     use tauri_plugin_dialog::DialogExt;
     app.dialog().file().set_directory(start).blocking_pick_folder().map(|p| p.to_string())
@@ -143,6 +161,16 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(Arc::new(Running::default()))
+        .on_window_event(|window, event| {
+            use tauri::Manager;
+            // Closing the main window closes the whole program, like on the Mac.
+            if window.label() == "main" {
+                if let tauri::WindowEvent::Destroyed = event {
+                    if let Some(state) = window.app_handle().try_state::<Arc<Running>>() { engine::stop_all(state.inner()); }
+                    window.app_handle().exit(0);
+                }
+            }
+        })
         .setup(|app| {
             // DEV-TEST-HOOK (remove before shipping): SCORPENA_AUTOTEST="<url>[ <url>...]" adds links as if pasted.
             if let Ok(links) = std::env::var("SCORPENA_AUTOTEST") {
@@ -165,7 +193,7 @@ fn main() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![run_job, stop_job, default_folder, choose_folder, reveal, open_window, fetch_preview, probe_quality, fetch_playlist, make_folder, send_telegram, open_url, tools_version, update_tools, stale_partials, remove_partials, environment_line, check_bundled_tools])
+        .invoke_handler(tauri::generate_handler![run_job, stop_job, default_folder, choose_folder, reveal, open_window, fetch_preview, probe_quality, fetch_playlist, make_folder, send_telegram, open_url, tools_version, update_tools, stale_partials, remove_partials, environment_line, check_bundled_tools, cookie_preflight, download_update, install_update])
         .run(tauri::generate_context!())
         .expect("error while running Scorpena");
 }

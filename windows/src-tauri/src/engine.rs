@@ -22,6 +22,12 @@ pub struct Job {
     pub audio_format: String,
     /// Speed limit in kilobits per second, 0 = none.
     pub limit_kbit: u32,
+    /// Browsers that were signed in at the first launch, best first.
+    #[serde(default)]
+    pub cookie_order: Vec<String>,
+    /// The browser whose cookies worked last time ("" = none).
+    #[serde(default)]
+    pub last_cookie: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -45,6 +51,10 @@ struct Line {
 struct Done {
     id: String,
     ok: bool,
+    /// "" | "h264" | "h264-failed" | "no-ffmpeg"
+    note: String,
+    /// The browser whose cookies were used ("" = none).
+    cookie: String,
     /// "" | "auth" | "network" | "unavailable" | "unsupported" | "format" | "forbidden" | "disk" | "other"
     reason: String,
     file: Option<String>,
@@ -291,8 +301,12 @@ pub fn run_job(app: AppHandle, state: Arc<Running>, job: Job) {
         state.stopped.lock().unwrap().remove(&job.id);
 
         // No cookies first; then the installed browsers.
+        let mut browsers = installed_browsers();
+        browsers.sort_by_key(|b| job.cookie_order.iter().position(|x| x == b).unwrap_or(usize::MAX));
+        if let Some(i) = browsers.iter().position(|b| *b == job.last_cookie) { let good = browsers.remove(i); browsers.insert(0, good); }
         let mut sources: Vec<Option<String>> = vec![None];
-        sources.extend(installed_browsers().into_iter().map(Some));
+        sources.extend(browsers.into_iter().map(Some));
+        let mut used_cookie = String::new();
         let mut log_all = String::new();
         let mut reason = String::from("other");
         let mut ok = false;
@@ -304,6 +318,7 @@ pub fn run_job(app: AppHandle, state: Arc<Running>, job: Job) {
             let mut args = build_args(&job, &staging, &temp);
             if let Some(browser) = &source {
                 args.extend(["--cookies-from-browser".to_string(), browser.clone()]);
+                let _ = app.emit("job-attempt", Line { id: job.id.clone(), line: browser.clone() });
             }
             args.push(job.url.clone());
 
@@ -315,7 +330,7 @@ pub fn run_job(app: AppHandle, state: Arc<Running>, job: Job) {
             let mut child = match cmd.spawn() {
                 Ok(c) => c,
                 Err(e) => {
-                    let _ = app.emit("job-done", Done { id: job.id.clone(), ok: false, reason: "other".into(), file: None, name: None, log_tail: format!("yt-dlp не запустился: {e}") });
+                    let _ = app.emit("job-done", Done { id: job.id.clone(), ok: false, note: String::new(), cookie: String::new(), reason: "other".into(), file: None, name: None, log_tail: format!("yt-dlp не запустился: {e}") });
                     return;
                 }
             };
@@ -360,6 +375,7 @@ pub fn run_job(app: AppHandle, state: Arc<Running>, job: Job) {
             log_all.push_str(&attempt_log);
             if status.map(|s| s.success()).unwrap_or(false) {
                 ok = true;
+                used_cookie = source.clone().unwrap_or_default();
                 break;
             }
             let lower = attempt_log.to_lowercase();
@@ -372,19 +388,24 @@ pub fn run_job(app: AppHandle, state: Arc<Running>, job: Job) {
         }
 
         let tail: String = log_all.lines().rev().take(30).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("\n");
+        let mut note = String::new();
+        if ok && !job.audio && (job.video_format == "mp4" || job.video_format == "mov") {
+            note = to_h264(&app, &state, &job.id, &staging);
+            if state.stopped.lock().unwrap().remove(&job.id) { return; }
+        }
         if ok {
             match deliver(&staging, Path::new(&job.dest)) {
                 Some(file) => {
                     let name = file.file_name().map(|n| n.to_string_lossy().to_string());
-                    let _ = app.emit("job-done", Done { id: job.id.clone(), ok: true, reason: "".into(), file: Some(file.to_string_lossy().into()), name, log_tail: tail });
+                    let _ = app.emit("job-done", Done { id: job.id.clone(), ok: true, note: note.clone(), cookie: used_cookie.clone(), reason: "".into(), file: Some(file.to_string_lossy().into()), name, log_tail: tail });
                 }
                 None => {
-                    let _ = app.emit("job-done", Done { id: job.id.clone(), ok: false, reason: "other".into(), file: None, name: None, log_tail: tail });
+                    let _ = app.emit("job-done", Done { id: job.id.clone(), ok: false, note: String::new(), cookie: String::new(), reason: "other".into(), file: None, name: None, log_tail: tail });
                 }
             }
         } else {
             let _ = std::fs::remove_dir(&staging);
-            let _ = app.emit("job-done", Done { id: job.id.clone(), ok: false, reason, file: None, name: None, log_tail: tail });
+            let _ = app.emit("job-done", Done { id: job.id.clone(), ok: false, note: String::new(), cookie: String::new(), reason, file: None, name: None, log_tail: tail });
         }
     });
 }
@@ -646,6 +667,11 @@ pub fn environment_line() -> String {
 
 /// Runs each bundled tool once. If one is missing or blocked, nothing can be downloaded — worth knowing about.
 pub fn check_bundled_tools() -> Vec<String> {
+    // an update that was interrupted in the middle of the swap: put the previous yt-dlp back
+    let live = tool("yt-dlp");
+    let old = live.with_extension("old");
+    if !live.exists() && old.exists() { let _ = std::fs::rename(&old, &live); } else { let _ = std::fs::remove_file(&old); }
+    let _ = std::fs::remove_file(live.with_extension(if cfg!(windows) { "new.exe" } else { "new" }));
     let mut problems = vec![];
     for (name, arg) in [("yt-dlp", "--version"), ("ffmpeg", "-version"), ("deno", "--version")] {
         let path = tool(name);
@@ -660,4 +686,243 @@ pub fn check_bundled_tools() -> Vec<String> {
         }
     }
     problems
+}
+
+
+// ---------- H.264: MP4 and MOV have to play everywhere ----------
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct Phase {
+    id: String,
+    phase: String,
+    percent: f64,
+}
+
+fn newest_video(dir: &Path) -> Option<PathBuf> {
+    let mut best: Option<(std::time::SystemTime, PathBuf)> = None;
+    for e in std::fs::read_dir(dir).ok()?.flatten() {
+        let p = e.path();
+        let name = p.file_name()?.to_string_lossy().to_lowercase();
+        if name.starts_with('.') || name.ends_with(".part") || name.ends_with(".ytdl") || name.contains(".h264.") { continue; }
+        let ext = p.extension().map(|x| x.to_string_lossy().to_lowercase()).unwrap_or_default();
+        if !["mp4", "mkv", "webm", "mov", "m4v"].contains(&ext.as_str()) { continue; }
+        let t = e.metadata().ok()?.modified().ok()?;
+        if best.as_ref().map_or(true, |(b, _)| t > *b) { best = Some((t, p)); }
+    }
+    best.map(|(_, p)| p)
+}
+
+fn probe_codec(file: &Path) -> (Option<String>, Option<f64>) {
+    let mut c = Command::new(tool("ffmpeg"));
+    c.args(["-hide_banner", "-i"]).arg(file).stdout(Stdio::null()).stderr(Stdio::piped());
+    no_window(&mut c);
+    let Ok(out) = c.output() else { return (None, None) };
+    let text = String::from_utf8_lossy(&out.stderr).to_string();
+    let mut codec = None;
+    let mut duration = None;
+    for line in text.lines() {
+        if codec.is_none() {
+            if let Some(i) = line.find("Video: ") {
+                codec = line[i + 7..].split(|ch: char| ch == ' ' || ch == ',' || ch == '(').next().map(|x| x.to_lowercase());
+            }
+        }
+        if duration.is_none() {
+            if let Some(i) = line.find("Duration: ") {
+                let t = line[i + 10..].split(',').next().unwrap_or("").trim();
+                let p: Vec<f64> = t.split(':').filter_map(|x| x.parse().ok()).collect();
+                if p.len() == 3 { duration = Some(p[0] * 3600.0 + p[1] * 60.0 + p[2]); }
+            }
+        }
+    }
+    (codec, duration)
+}
+
+/// Checks the codec of the finished file and re-encodes it into H.264 when it is something else.
+/// Returns "", "h264", "h264-failed" or "no-ffmpeg".
+fn to_h264(app: &AppHandle, state: &Arc<Running>, id: &str, staging: &Path) -> String {
+    let phase = |name: &str, percent: f64| { let _ = app.emit("job-phase", Phase { id: id.to_string(), phase: name.to_string(), percent }); };
+    let Some(file) = newest_video(staging) else { return String::new() };
+    if !tool("ffmpeg").exists() { return "no-ffmpeg".into(); }
+    phase("check", 0.0);
+    let (codec, duration) = probe_codec(&file);
+    let codec = codec.unwrap_or_default();
+    if codec.is_empty() || codec == "h264" || codec == "avc1" { return String::new(); }
+
+    let ext = file.extension().map(|e| e.to_string_lossy().to_string()).unwrap_or_else(|| "mp4".into());
+    let output = file.with_extension(format!("h264.{ext}"));
+    let _ = std::fs::remove_file(&output);
+    phase("transcode", 0.0);
+    let mut cmd = Command::new(tool("ffmpeg"));
+    cmd.args(["-y", "-hide_banner", "-loglevel", "error", "-nostats", "-progress", "pipe:1", "-i"]).arg(&file)
+        .args(["-map", "0:v:0", "-map", "0:a:0?", "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p",
+               "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart"]).arg(&output)
+        .stdout(Stdio::piped()).stderr(Stdio::null());
+    no_window(&mut cmd);
+    let Ok(mut child) = cmd.spawn() else { return "h264-failed".into() };
+    let stdout = child.stdout.take();
+    let slot = Arc::new(Mutex::new(Some(child)));
+    state.children.lock().unwrap().insert(id.to_string(), slot.clone());
+    if let Some(out) = stdout {
+        for line in BufReader::new(out).lines().map_while(Result::ok) {
+            if let Some(us) = line.strip_prefix("out_time_us=").or_else(|| line.strip_prefix("out_time_ms=")) {
+                if let (Ok(t), Some(total)) = (us.trim().parse::<f64>(), duration) {
+                    if total > 0.0 { phase("transcode", (t / 1_000_000.0 / total).min(1.0)); }
+                }
+            }
+        }
+    }
+    let ok = slot.lock().unwrap().as_mut().and_then(|c| c.wait().ok()).map(|s| s.success()).unwrap_or(false);
+    state.children.lock().unwrap().remove(id);
+    if state.stopped.lock().unwrap().contains(id) { let _ = std::fs::remove_file(&output); return String::new(); }
+    if ok && output.exists() && std::fs::remove_file(&file).is_ok() && std::fs::rename(&output, &file).is_ok() { return "h264".into(); }
+    let _ = std::fs::remove_file(&output);
+    "h264-failed".into()
+}
+
+/// Stops every running download (when the program closes).
+pub fn stop_all(state: &Arc<Running>) {
+    let ids: Vec<String> = state.children.lock().unwrap().keys().cloned().collect();
+    for id in ids { stop_job(state, &id); }
+}
+
+// ---------- first launch: which browsers are signed in (only cookie NAMES are read, nothing is decrypted) ----------
+
+const LOGIN_COOKIES: [(&str, &[&str]); 3] = [
+    ("youtube.com", &["SAPISID", "LOGIN_INFO", "__Secure-3PSID"]),
+    ("instagram.com", &["sessionid"]),
+    ("vimeo.com", &["vimeo"]),
+];
+
+fn profile_dbs(root: &Path, files: &[&str]) -> Vec<PathBuf> {
+    let mut out = vec![];
+    for e in std::fs::read_dir(root).into_iter().flatten().flatten() {
+        for f in files {
+            let p = e.path().join(f);
+            if p.exists() { out.push(p); }
+        }
+    }
+    out
+}
+
+/// Works on a copy, because the browser keeps its own file locked while it runs.
+fn count_sites(db: &Path, table: &str, host_col: &str) -> usize {
+    let tmp = std::env::temp_dir().join(format!("scorpena-cookies-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&tmp);
+    let copy = tmp.join("db");
+    let result = (|| -> Option<usize> {
+        std::fs::copy(db, &copy).ok()?;
+        let wal = PathBuf::from(format!("{}-wal", db.display()));
+        if wal.exists() { let _ = std::fs::copy(&wal, tmp.join("db-wal")); }
+        let conn = rusqlite::Connection::open_with_flags(&copy, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
+        let mut n = 0;
+        for (host, names) in LOGIN_COOKIES {
+            let list = names.iter().map(|x| format!("'{x}'")).collect::<Vec<_>>().join(",");
+            let sql = format!("select count(*) from {table} where {host_col} like '%{host}' and name in ({list})");
+            let c: i64 = conn.query_row(&sql, [], |r| r.get(0)).unwrap_or(0);
+            if c > 0 { n += 1; }
+        }
+        Some(n)
+    })();
+    let _ = std::fs::remove_dir_all(&tmp);
+    result.unwrap_or(0)
+}
+
+fn default_browser() -> Option<String> {
+    if !cfg!(windows) { return None; }
+    let mut c = Command::new("reg");
+    c.args(["query", r"HKCU\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice", "/v", "ProgId"]).stdout(Stdio::piped()).stderr(Stdio::null());
+    no_window(&mut c);
+    let out = String::from_utf8_lossy(&c.output().ok()?.stdout).to_lowercase();
+    for (needle, name) in [("chromehtml", "chrome"), ("msedgehtm", "edge"), ("firefox", "firefox"), ("bravehtml", "brave"), ("yandex", "yandex"), ("opera", "opera"), ("vivaldi", "vivaldi")] {
+        if out.contains(needle) { return Some(name.into()); }
+    }
+    None
+}
+
+/// Installed browsers that already have a login, best first.
+pub fn cookie_preflight() -> Vec<String> {
+    let mut scored: Vec<(String, usize)> = vec![];
+    let (local, roaming, home) = if cfg!(windows) {
+        (std::env::var("LOCALAPPDATA").unwrap_or_default(), std::env::var("APPDATA").unwrap_or_default(), String::new())
+    } else {
+        (String::new(), String::new(), std::env::var("HOME").unwrap_or_default())
+    };
+    for b in installed_browsers() {
+        let mut best = 0;
+        let chromium: Option<PathBuf> = match (b.as_str(), cfg!(windows)) {
+            ("chrome", true) => Some(PathBuf::from(&local).join("Google/Chrome/User Data")),
+            ("edge", true) => Some(PathBuf::from(&local).join("Microsoft/Edge/User Data")),
+            ("brave", true) => Some(PathBuf::from(&local).join("BraveSoftware/Brave-Browser/User Data")),
+            ("vivaldi", true) => Some(PathBuf::from(&local).join("Vivaldi/User Data")),
+            ("yandex", true) => Some(PathBuf::from(&local).join("Yandex/YandexBrowser/User Data")),
+            ("chrome", false) => Some(PathBuf::from(&home).join("Library/Application Support/Google/Chrome")),
+            _ => None,
+        };
+        if let Some(root) = chromium {
+            for db in profile_dbs(&root, &["Network/Cookies", "Cookies"]) { best = best.max(count_sites(&db, "cookies", "host_key")); }
+        } else if b == "firefox" {
+            let root = if cfg!(windows) { PathBuf::from(&roaming).join("Mozilla/Firefox/Profiles") } else { PathBuf::from(&home).join("Library/Application Support/Firefox/Profiles") };
+            for db in profile_dbs(&root, &["cookies.sqlite"]) { best = best.max(count_sites(&db, "moz_cookies", "host")); }
+        } else if b == "opera" {
+            let root = PathBuf::from(&roaming).join("Opera Software");
+            for db in profile_dbs(&root, &["Network/Cookies", "Cookies"]) { best = best.max(count_sites(&db, "cookies", "host_key")); }
+        }
+        if best > 0 { scored.push((b, best)); }
+    }
+    let default = default_browser();
+    scored.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| (Some(&b.0) == default.as_ref()).cmp(&(Some(&a.0) == default.as_ref()))));
+    scored.into_iter().map(|(b, _)| b).collect()
+}
+
+// ---------- updating the program itself ----------
+
+#[derive(Serialize, Clone)]
+struct Fraction(f64);
+
+/// Downloads the newest installer to a temporary folder and checks it against the checksum GitHub published.
+pub fn download_update(app: &AppHandle) -> Result<String, String> {
+    let rel: serde_json::Value = ureq::get("https://api.github.com/repos/erickkey/Scorpena/releases/latest")
+        .set("User-Agent", "Scorpena-app").timeout(std::time::Duration::from_secs(15)).call().map_err(|e| e.to_string())?
+        .into_json().map_err(|e| e.to_string())?;
+    let asset = rel["assets"].as_array().and_then(|a| a.iter().find(|x| x["name"] == "Scorpena.exe")).ok_or("в релизе нет Scorpena.exe")?;
+    let url = asset["browser_download_url"].as_str().ok_or("нет ссылки")?.to_string();
+    let digest = asset["digest"].as_str().unwrap_or("").trim_start_matches("sha256:").to_lowercase();
+    let size = asset["size"].as_u64().unwrap_or(0);
+    let dir = std::env::temp_dir().join("scorpena-update");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join("Scorpena.exe");
+    let resp = ureq::get(&url).set("User-Agent", "Scorpena-app").timeout(std::time::Duration::from_secs(600)).call().map_err(|e| e.to_string())?;
+    let mut reader = resp.into_reader();
+    let mut file = std::fs::File::create(&path).map_err(|e| e.to_string())?;
+    use sha2::{Digest, Sha256};
+    use std::io::{Read, Write};
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; 256 * 1024];
+    let mut got = 0u64;
+    loop {
+        let n = reader.read(&mut buf).map_err(|e| e.to_string())?;
+        if n == 0 { break; }
+        file.write_all(&buf[..n]).map_err(|e| e.to_string())?;
+        hasher.update(&buf[..n]);
+        got += n as u64;
+        if size > 0 { let _ = app.emit("update-progress", Fraction((got as f64 / size as f64).min(1.0))); }
+    }
+    drop(file);
+    let hash: String = hasher.finalize().iter().map(|b| format!("{b:02x}")).collect();
+    if !digest.is_empty() && hash != digest { let _ = std::fs::remove_dir_all(&dir); return Err("контрольная сумма не сошлась".into()); }
+    if size > 0 && got != size { let _ = std::fs::remove_dir_all(&dir); return Err("файл загрузился не полностью".into()); }
+    Ok(path.to_string_lossy().into())
+}
+
+/// Starts the installer quietly after the program has closed, then opens the program again.
+pub fn install_update(installer: &str) -> bool {
+    let app = std::env::current_exe().unwrap_or_default();
+    if !cfg!(windows) { return false; }
+    let line = format!("timeout /t 3 /nobreak >nul & start /wait \"\" \"{installer}\" /S & start \"\" \"{}\"", app.display());
+    let mut c = Command::new("cmd");
+    c.args(["/C", &line]);
+    no_window(&mut c);
+    c.spawn().is_ok()
 }
