@@ -11,9 +11,11 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const ps = (...a) => { try { return execFileSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.resolve('win.ps1'), ...a], { encoding: 'utf8' }).trim(); } catch (e) { return 'ERR ' + e.message; } };
 const desk = (name) => ps('shot', path.join(OUT, name + '.png'));
 const results = {};
-async function step(name, fn) {
-  try { const r = await fn(); results[name] = r === undefined ? 'ok' : r; say(`✔ ${name}: ${JSON.stringify(results[name])}`); }
-  catch (e) { results[name] = 'FAIL ' + e.message; say(`✘ ${name}: ${e.message}`); }
+const withTimeout = (p, ms, name) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('step timed out after ' + ms / 1000 + ' s')), ms))]);
+setTimeout(() => { say('global time limit reached'); desk('global-timeout'); process.exit(0); }, 18 * 60 * 1000);
+async function step(name, fn, ms = 200000) {
+  try { const r = await withTimeout(fn(), ms, name); results[name] = r === undefined ? 'ok' : r; say(`✔ ${name}: ${JSON.stringify(results[name])}`); }
+  catch (e) { results[name] = 'FAIL ' + e.message; say(`✘ ${name}: ${e.message}`); desk('fail-' + name); }
   fs.writeFileSync(path.join(OUT, 'results.json'), JSON.stringify(results, null, 1));
 }
 
@@ -33,7 +35,7 @@ try { execFileSync('powershell', ['-NoProfile', '-Command', "New-Item -Path 'HKL
 const child = spawn(exe, [], { env: { ...process.env, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: '--remote-debugging-port=9222' }, detached: false, stdio: 'ignore' });
 await sleep(8000);
 let browser;
-for (let i = 0; i < 20 && !browser; i++) { try { browser = await puppeteer.connect({ browserURL: 'http://127.0.0.1:9222', defaultViewport: null }); } catch (e) { await sleep(1500); } }
+for (let i = 0; i < 20 && !browser; i++) { try { browser = await puppeteer.connect({ browserURL: 'http://127.0.0.1:9222', defaultViewport: null, protocolTimeout: 20000 }); } catch (e) { await sleep(1500); } }
 if (!browser) {
   say('cannot connect to the program'); desk('no-connect');
   const sh = (c) => { try { return execFileSync('powershell', ['-NoProfile', '-Command', c], { encoding: 'utf8' }); } catch (e) { return 'ERR ' + e.message; } };
@@ -48,9 +50,12 @@ const pageBy = async (re, wait = 10000) => { const t0 = Date.now(); while (Date.
 let main = await pageBy(/tauri\.localhost\/(index\.html)?$|tauri\.localhost\/?$/);
 if (!main) { for (const p of await pages()) say('page: ' + p.url()); main = (await pages())[0]; }
 
+desk('01-just-started');
+for (const p of await pages()) { let info = ''; try { info = await withTimeout(p.evaluate(() => document.readyState + ' | ' + document.title + ' | text:' + (document.body ? document.body.innerText.length : -1)), 8000); } catch (e) { info = 'eval failed: ' + e.message; } say('page: ' + p.url() + ' -> ' + info); }
+say('windows: ' + ps('windows', procName));
 await step('settings-first-launch', async () => {
   await main.evaluate(() => { localStorage.setItem('lang', 'ru'); localStorage.setItem('welcomed', '1'); localStorage.setItem('settings', JSON.stringify({ lastSeenChangelog: '3.1.1', cookiePreflightDone: true, lastToolCheck: Date.now() })); });
-  await main.reload(); await sleep(3000);
+  await main.evaluate(() => location.reload()); await sleep(5000);
   await main.screenshot({ path: path.join(OUT, 'main.png') }); desk('desktop-main');
   return { title: await main.title(), windows: JSON.parse(ps('windows', procName) || '[]') };
 });
