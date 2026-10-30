@@ -481,6 +481,9 @@ struct ContentView: View {
                 "Новый облик, новые возможности, и всё работает лучше, чем раньше."),
     ]
 
+    /// A thin line after this many items, to set a fix apart from the rest of the list.
+    static let changelogDividerAfter: [String: Int] = ["3.1.1": 1]
+
     /// A call to action shown under the list, highlighted so it isn't missed.
     static let changelogCallouts: [String: String] = [:]
 
@@ -1753,10 +1756,14 @@ private struct WhatsNewList: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 10) {
-                ForEach(ContentView.changelog[version] ?? [], id: \.self) { item in
+                let items = ContentView.changelog[version] ?? []
+                ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text("•").foregroundStyle(.secondary)
                         Text(tr(item)).font(.callout).fixedSize(horizontal: false, vertical: true)
+                    }
+                    if ContentView.changelogDividerAfter[version] == index + 1 {
+                        Divider()
                     }
                 }
             }
