@@ -32,7 +32,14 @@ const child = spawn(exe, [], { env: { ...process.env, WEBVIEW2_ADDITIONAL_BROWSE
 await sleep(8000);
 let browser;
 for (let i = 0; i < 20 && !browser; i++) { try { browser = await puppeteer.connect({ browserURL: 'http://127.0.0.1:9222', defaultViewport: null }); } catch (e) { await sleep(1500); } }
-if (!browser) { say('cannot connect to the program'); desk('no-connect'); process.exit(1); }
+if (!browser) {
+  say('cannot connect to the program'); desk('no-connect');
+  const sh = (c) => { try { return execFileSync('powershell', ['-NoProfile', '-Command', c], { encoding: 'utf8' }); } catch (e) { return 'ERR ' + e.message; } };
+  say('listening: ' + sh('netstat -ano | findstr LISTENING | findstr 127.0.0.1'));
+  say('webview2: ' + sh("Get-CimInstance Win32_Process -Filter \"name='msedgewebview2.exe'\" | Select-Object -First 3 -ExpandProperty CommandLine"));
+  say('json/version: ' + sh('try { (Invoke-WebRequest http://127.0.0.1:9222/json/version -UseBasicParsing).Content } catch { $_.Exception.Message }'));
+  process.exit(1);
+}
 const pages = async () => (await browser.pages());
 const pageBy = async (re, wait = 10000) => { const t0 = Date.now(); while (Date.now() - t0 < wait) { for (const p of await pages()) if (re.test(p.url())) return p; await sleep(400); } return null; };
 
