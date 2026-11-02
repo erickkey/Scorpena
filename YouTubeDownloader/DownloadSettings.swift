@@ -113,6 +113,58 @@ enum SpeedLimit {
     }
 }
 
+/// The part of a video to save instead of all of it (seconds from the start).
+struct ClipSection: Codable, Equatable {
+    var start: Double
+    var end: Double
+
+    var length: Double { max(0, end - start) }
+
+    /// «1.07-3.00» — goes into the file name; «1.02.03» for an hour or more.
+    var fileTag: String {
+        func text(_ t: Double) -> String {
+            let s = Int(t.rounded())
+            return s >= 3600 ? String(format: "%d.%02d.%02d", s / 3600, s % 3600 / 60, s % 60)
+                             : String(format: "%d.%02d", s / 60, s % 60)
+        }
+        return text(start) + "-" + text(end)
+    }
+
+    /// yt-dlp's `--download-sections` value.
+    var ytDlpValue: String { String(format: "*%.2f-%.2f", start, end) }
+
+    /// «1:07» or «1:02:03» for the fields of the clip window.
+    static func clock(_ t: Double) -> String {
+        let s = max(0, Int(t.rounded()))
+        return s >= 3600 ? String(format: "%d:%02d:%02d", s / 3600, s % 3600 / 60, s % 60)
+                         : String(format: "%d:%02d", s / 60, s % 60)
+    }
+
+    /// Reads «1:07», «1:02:03», «67» or «67,5» (seconds); nil when it isn't a time.
+    static func parse(_ text: String) -> Double? {
+        let cleaned = text.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")
+        guard !cleaned.isEmpty else { return nil }
+        let parts = cleaned.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+        guard parts.count <= 3 else { return nil }
+        var total = 0.0
+        for part in parts {
+            guard let value = Double(part), value >= 0 else { return nil }
+            total = total * 60 + value
+        }
+        return total
+    }
+}
+
+extension QueuedDownload {
+    /// Everything that makes one file differ from another of the same link.
+    var settingsKey: String {
+        [audioOnly ? "a" + audioFormat.rawValue : "v" + videoFormat.rawValue,
+         audioOnly ? "0" : String(maxHeight ?? 0),
+         stripAudio && !audioOnly ? "mute" : "",
+         section?.fileTag ?? ""].joined(separator: "|")
+    }
+}
+
 /// A download that didn't finish — paused by the user, or cut off when the app
 /// was closed. yt-dlp keeps the partial file, so running the same request again
 /// continues from where it stopped.
@@ -125,6 +177,7 @@ struct UnfinishedDownload: Codable, Equatable {
     var videoFormat: String
     var audioFormat: String
     var name: String?
+    var section: ClipSection? = nil
 
     private static let key = "unfinishedDownload"
 

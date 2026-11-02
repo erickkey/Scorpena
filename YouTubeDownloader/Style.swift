@@ -279,3 +279,224 @@ struct TextWithGear: View {
         }
     }
 }
+
+
+/// Decides, frame by frame, how far a progress bar is drawn. Three things make it feel smooth:
+/// while nothing is reported yet it creeps forward slowly (so the app never looks frozen); when
+/// progress arrives it eases to the new place instead of jumping; and between two reports it keeps
+/// going at the pace it was going, so it never stands still waiting for the next line.
+final class BarDriver {
+    private(set) var shown = 0.0
+    private var lastValue = 0.0
+    private var lastValueTime = Date()
+    private var lastFrame = Date()
+    private var creepStart = Date()
+    private var rate = 0.0               // share of the whole per second, smoothed
+
+    func frame(now: Date, value: Double, creeping: Bool) -> Double {
+        let dt = min(0.1, max(0.001, now.timeIntervalSince(lastFrame)))
+        lastFrame = now
+
+        if value < lastValue - 0.2 || (value == 0 && lastValue > 0) {
+            // A new download (or a pause): start over.
+            shown = 0; rate = 0; creepStart = now
+        }
+        if value != lastValue {
+            let span = now.timeIntervalSince(lastValueTime)
+            if value > lastValue, span > 0.05 {
+                let instant = (value - lastValue) / span
+                rate = rate == 0 ? instant : rate * 0.6 + instant * 0.4
+            }
+            lastValue = value
+            lastValueTime = now
+        }
+
+        var target: Double
+        if value <= 0 {
+            // Nothing reported yet: a slow creep inside the part of the bar kept for the preparation
+            // (under 8%), long enough that it is still visibly moving after ten seconds.
+            target = creeping ? 0.075 * (1 - exp(-now.timeIntervalSince(creepStart) / 8)) : 0
+        } else {
+            // Carry on at the pace of the last reports; the lead over them grows softly and
+            // levels off (about 4%), so the bar slows down rather than stopping if a report is late.
+            let cap = 0.04
+            let ahead = cap * (1 - exp(-rate * now.timeIntervalSince(lastValueTime) / cap))
+            target = min(1, value + max(0, ahead))
+        }
+        // The bar only goes forward (a report that lands behind it just waits to be caught up) — and
+        // while a download runs it never stands completely still: a very slow drift, within 5% of the reports.
+        target = max(target, shown)
+        if value > 0, value < 1, shown < value + 0.05 { target = max(target, shown + 0.006 * dt) }
+
+        // Ease towards the target: quick enough to keep up, soft enough to look like one motion.
+        let settle = value >= 1 ? 0.12 : (value > 0 ? 0.35 : 0.8)
+        shown += (target - shown) * (1 - exp(-dt / settle))
+        if abs(shown - target) < 0.0005 { shown = target }
+        return min(1, max(0, shown))
+    }
+
+    func isMoving(value: Double, creeping: Bool) -> Bool {
+        creeping || (value > 0 && value < 1) || abs(shown - value) > 0.002
+    }
+}
+
+/// A progress bar that glides (see `BarDriver`).
+struct SmoothBar: View {
+    let value: Double
+    /// True while a download is on but has reported nothing yet.
+    var creeping = false
+    var height: CGFloat = 6
+    var tint: Color = .accentColor
+    var track: Color = Color.primary.opacity(0.12)
+    var square = false
+
+    @State private var driver = BarDriver()
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !driver.isMoving(value: value, creeping: creeping))) { timeline in
+            let drawn = driver.frame(now: timeline.date, value: value, creeping: creeping)
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    shape.fill(track)
+                    shape.fill(tint)
+                        .frame(width: proxy.size.width * drawn)
+                        .opacity(drawn > 0.001 ? 1 : 0)
+                }
+            }
+            .frame(height: height)
+        }
+    }
+
+    private var shape: AnyShape { square ? AnyShape(Rectangle()) : AnyShape(Capsule()) }
+}
+
+/// Every symbol of the toolbar, drawn by hand to ONE set of rules (the rules of the best open
+/// line-icon sets, such as Lucide and Feather): a 24-unit grid, one stroke width (thin), round ends and
+/// corners, outlines only — nothing filled — and the same visual size for all of them.
+struct ToolbarIcon: View {
+    let name: String
+
+    var body: some View {
+        Canvas { context, size in
+            let s = min(size.width, size.height) / 24
+            let style = StrokeStyle(lineWidth: 1.55 * s, lineCap: .round, lineJoin: .round)
+            func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * s, y: y * s) }
+            func circle(_ cx: CGFloat, _ cy: CGFloat, _ r: CGFloat) -> Path {
+                Path(ellipseIn: CGRect(x: (cx - r) * s, y: (cy - r) * s, width: 2 * r * s, height: 2 * r * s))
+            }
+            func line(_ path: inout Path, _ x1: CGFloat, _ y1: CGFloat, _ x2: CGFloat, _ y2: CGFloat) {
+                path.move(to: p(x1, y1)); path.addLine(to: p(x2, y2))
+            }
+            var path = Path()
+            switch name {
+            case "queue":
+                // A list: three lines, and a dot before each (a dot is a line of no length: same weight).
+                for y: CGFloat in [6, 12, 18] {
+                    line(&path, 8, y, 21, y)
+                    line(&path, 3, y, 3.01, y)
+                }
+            case "history":
+                // A clock with an arrow that runs back.
+                let centre = (x: 12.0, y: 12.0, r: 9.0)
+                var points: [CGPoint] = []
+                let start = Double.pi, end = -137.0 * .pi / 180
+                for k in 0...64 {
+                    let t = start + (end - start) * Double(k) / 64
+                    points.append(p(CGFloat(centre.x + centre.r * cos(t)), CGFloat(centre.y + centre.r * sin(t))))
+                }
+                path.move(to: points[0])
+                for point in points.dropFirst() { path.addLine(to: point) }
+                path.addLine(to: p(3, 8))
+                path.move(to: p(3, 3)); path.addLine(to: p(3, 8)); path.addLine(to: p(8, 8))
+                path.move(to: p(12, 7)); path.addLine(to: p(12, 12)); path.addLine(to: p(16, 14))
+            case "scissors":
+                path.addPath(circle(6, 6, 3))
+                path.addPath(circle(6, 18, 3))
+                line(&path, 20, 4, 8.12, 15.88)
+                line(&path, 14.47, 14.48, 20, 20)
+                line(&path, 8.12, 8.12, 12, 12)
+            case "settings":
+                // A gear: eight teeth round a ring, a hole in the middle.
+                let teeth = 8
+                for i in 0..<teeth {
+                    let centre = Double(i) * 2 * .pi / Double(teeth)
+                    let steps: [(Double, CGFloat)] = [(-0.25, 7.7), (-0.15, 10), (0.15, 10), (0.25, 7.7)]
+                    for (k, step) in steps.enumerated() {
+                        let angle = centre + step.0
+                        let point = p(12 + step.1 * CGFloat(cos(angle)), 12 + step.1 * CGFloat(sin(angle)))
+                        if i == 0 && k == 0 { path.move(to: point) } else { path.addLine(to: point) }
+                    }
+                }
+                path.closeSubpath()
+                path.addPath(circle(12, 12, 3))
+            case "sun":
+                path.addPath(circle(12, 12, 4))
+                line(&path, 12, 2, 12, 4); line(&path, 12, 20, 12, 22)
+                line(&path, 4.93, 4.93, 6.34, 6.34); line(&path, 17.66, 17.66, 19.07, 19.07)
+                line(&path, 2, 12, 4, 12); line(&path, 20, 12, 22, 12)
+                line(&path, 6.34, 17.66, 4.93, 19.07); line(&path, 19.07, 4.93, 17.66, 6.34)
+            case "moon":
+                // The outer circle without the part a second circle covers.
+                let c1 = (x: 12.0, y: 12.0, r: 9.0), c2 = (x: 16.5, y: 8.5, r: 7.2)
+                let dx = c2.x - c1.x, dy = c2.y - c1.y
+                let d = (dx * dx + dy * dy).squareRoot()
+                let a = (c1.r * c1.r - c2.r * c2.r + d * d) / (2 * d)
+                let h = max(0, c1.r * c1.r - a * a).squareRoot()
+                let mx = c1.x + a * dx / d, my = c1.y + a * dy / d
+                let tips = [(mx + h * dy / d, my - h * dx / d), (mx - h * dy / d, my + h * dx / d)]
+                func angle(_ t: (Double, Double), _ c: (x: Double, y: Double, r: Double)) -> Double { atan2(t.1 - c.y, t.0 - c.x) }
+                func arc(_ c: (x: Double, y: Double, r: Double), from a0: Double, to a1: Double, wanted: (Double, Double) -> Bool) -> [CGPoint] {
+                    var span = a1 - a0
+                    if span < 0 { span += 2 * .pi }
+                    let m = (c.x + c.r * cos(a0 + span / 2), c.y + c.r * sin(a0 + span / 2))
+                    if !wanted(m.0, m.1) { span -= 2 * .pi }
+                    return (0...48).map { k in
+                        let t = a0 + span * Double(k) / 48
+                        return p(CGFloat(c.x + c.r * cos(t)), CGFloat(c.y + c.r * sin(t)))
+                    }
+                }
+                let outside2: (Double, Double) -> Bool = { x, y in ((x - c2.x) * (x - c2.x) + (y - c2.y) * (y - c2.y)).squareRoot() > c2.r }
+                let inside1: (Double, Double) -> Bool = { x, y in ((x - c1.x) * (x - c1.x) + (y - c1.y) * (y - c1.y)).squareRoot() < c1.r }
+                let outer = arc(c1, from: angle(tips[0], c1), to: angle(tips[1], c1), wanted: outside2)
+                let inner = arc(c2, from: angle(tips[1], c2), to: angle(tips[0], c2), wanted: inside1)
+                if let first = outer.first {
+                    path.move(to: first)
+                    for point in outer.dropFirst() + inner { path.addLine(to: point) }
+                    path.closeSubpath()
+                }
+            case "auto":
+                // «Like the system»: a screen.
+                path.addRoundedRect(in: CGRect(x: 2 * s, y: 3 * s, width: 20 * s, height: 14 * s),
+                                    cornerSize: CGSize(width: 2 * s, height: 2 * s))
+                line(&path, 8, 21, 16, 21)
+                line(&path, 12, 17, 12, 21)
+            default:
+                break
+            }
+            context.stroke(path, with: .foreground, style: style)
+        }
+        .frame(width: 20, height: 20)
+    }
+}
+
+/// A light hairline between the parts of a window.
+struct ThinLine: View {
+    var body: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.1))
+            .frame(height: 0.5)
+    }
+}
+
+
+/// «Показать файл» — one rule for every place that has such a button: the file is shown in Finder
+/// when it is there; when it is not (deleted, moved), nothing opens and the caller says «Файл не найден».
+/// (Asking Finder to select a file that is gone makes it open some folder instead — that was the bug.)
+enum FileReveal {
+    @discardableResult
+    static func show(_ url: URL?) -> Bool {
+        guard let url, FileManager.default.fileExists(atPath: url.path) else { return false }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+        return true
+    }
+}

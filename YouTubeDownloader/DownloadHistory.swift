@@ -12,6 +12,14 @@ struct HistoryItem: Codable, Identifiable, Equatable {
     var date: Date
     /// Set for a whole playlist: how many of its videos were downloaded.
     var playlistCount: Int? = nil
+    /// Where the finished file went, and the choices it was made with (format, quality,
+    /// no-audio, clip): the same link with the same choices is «already downloaded».
+    var filePath: String? = nil
+    var settingsKey: String? = nil
+    /// Length of the video in seconds (of the clip, for a clip).
+    var duration: Double? = nil
+    /// Size of the finished file in bytes.
+    var fileSize: Int64? = nil
 
     var isPlaylist: Bool { playlistCount != nil }
 }
@@ -43,18 +51,28 @@ final class DownloadHistory: ObservableObject {
     }
 
     /// Call on the main thread right after a download finishes successfully.
-    func record(url: String, audioOnly: Bool, ytDlp: String?, cookieArgs: [String]) {
-        let previous = items.first { $0.url == url }
-        items.removeAll { $0.url == url }
-        let item = HistoryItem(url: url,
+    func record(url: String, audioOnly: Bool, ytDlp: String?, cookieArgs: [String],
+                filePath: String? = nil, settingsKey: String? = nil, clipLength: Double? = nil, fileSize: Int64? = nil) {
+        // Same link: the new entry replaces the old one, unless the old one is a different file
+        // (another clip, another format) — that one stays.
+        func isSame(_ old: HistoryItem) -> Bool {
+            old.url == url && !old.isPlaylist && (old.settingsKey == nil || settingsKey == nil || old.settingsKey == settingsKey)
+        }
+        let previous = items.first(where: isSame) ?? items.first { $0.url == url }
+        items.removeAll(where: isSame)
+        var item = HistoryItem(url: url,
                                title: previous?.title,
                                thumbnailFile: previous?.thumbnailFile,
                                audioOnly: audioOnly,
                                date: Date())
+        item.filePath = filePath
+        item.settingsKey = settingsKey
+        item.fileSize = fileSize
+        item.duration = clipLength ?? (previous?.settingsKey == nil || previous?.settingsKey == settingsKey ? previous?.duration : nil)
         items.insert(item, at: 0)
         prune()
 
-        if item.title == nil || item.thumbnailFile == nil, let ytDlp {
+        if item.title == nil || item.thumbnailFile == nil || item.duration == nil, let ytDlp {
             fetchMetadata(for: item.id, url: url, ytDlp: ytDlp, cookieArgs: cookieArgs)
         }
     }
@@ -75,6 +93,49 @@ final class DownloadHistory: ObservableObject {
 
     func clear() {
         items.removeAll()
+        prune()
+    }
+
+    /// Where the file of an entry is now. Entries made before the path was kept are looked for by
+    /// their title in the folder the downloads go to (and then remembered).
+    func fileURL(for item: HistoryItem) -> URL? {
+        let fm = FileManager.default
+        if let path = item.filePath, fm.fileExists(atPath: path) { return URL(fileURLWithPath: path) }
+        guard !item.isPlaylist, let title = item.title else { return nil }
+        func plain(_ text: String) -> String { text.lowercased().filter { $0.isLetter || $0.isNumber } }
+        let wanted = plain(title)
+        guard wanted.count >= 4 else { return nil }
+        let folder = UserDefaults.standard.string(forKey: "destinationFolder")
+            ?? fm.urls(for: .downloadsDirectory, in: .userDomainMask).first?.path ?? NSHomeDirectory()
+        let names = (try? fm.contentsOfDirectory(atPath: folder)) ?? []
+        guard let name = names.first(where: { $0.contains("(Scorpena video downloader)") && plain($0).contains(wanted) }) else { return nil }
+        let url = URL(fileURLWithPath: folder).appendingPathComponent(name)
+        if let index = items.firstIndex(where: { $0.id == item.id }) { items[index].filePath = url.path; save() }
+        return url
+    }
+
+    /// The file of an earlier download of this link with the same choices, if it is still there.
+    func existingFile(url: String, settingsKey: String) -> URL? {
+        let wanted = url.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        for item in items where item.settingsKey == settingsKey
+            && item.url.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == wanted {
+            if let path = item.filePath, FileManager.default.fileExists(atPath: path) {
+                return URL(fileURLWithPath: path)
+            }
+        }
+        return nil
+    }
+
+    /// One entry out of the list.
+    func remove(id: UUID) {
+        items.removeAll { $0.id == id }
+        prune()
+    }
+
+    /// Everything from one day.
+    func removeDay(_ day: Date) {
+        let calendar = Calendar.current
+        items.removeAll { calendar.isDate($0.date, inSameDayAs: day) }
         prune()
     }
 
@@ -130,7 +191,7 @@ final class DownloadHistory: ObservableObject {
             let p = Process()
             p.executableURL = URL(fileURLWithPath: ytDlp)
             p.arguments = ["--no-warnings", "--no-playlist", "--skip-download",
-                           "--print", "%(title)s", "--print", "%(thumbnail)s"]
+                           "--print", "%(title)s", "--print", "%(thumbnail)s", "--print", "%(duration)s"]
                 + DownloadManager.jsRuntimeArgs() + cookieArgs + [url]
             var env = ProcessInfo.processInfo.environment
             env["PATH"] = DownloadManager.toolSearchPath(ytDlp: ytDlp)
@@ -149,8 +210,9 @@ final class DownloadHistory: ObservableObject {
                 .map { $0.trimmingCharacters(in: .whitespaces) }
             let title = lines.first.flatMap { $0.isEmpty || $0 == "NA" ? nil : $0 }
             let thumbAddress = lines.count > 1 ? URL(string: lines[1]) : nil
+            let seconds = lines.count > 2 ? Double(lines[2]) : nil
 
-            DispatchQueue.main.async { self?.apply(title: title, to: id) }
+            DispatchQueue.main.async { self?.apply(title: title, duration: seconds, to: id) }
 
             guard let thumbAddress, thumbAddress.scheme?.hasPrefix("http") == true else { return }
             var request = URLRequest(url: thumbAddress)
@@ -162,11 +224,43 @@ final class DownloadHistory: ObservableObject {
         }
     }
 
-    private func apply(title: String?, to id: UUID) {
-        guard let title, let index = items.firstIndex(where: { $0.id == id }) else { return }
-        items[index].title = title
+    private func apply(title: String?, duration: Double?, to id: UUID) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        if let title { items[index].title = title }
+        // A clip keeps its own length; a whole video gets the length the site reports.
+        if let duration, items[index].duration == nil { items[index].duration = duration }
         save()
     }
+
+    /// Entries made before lengths were kept get theirs, a few at a time, one after another.
+    func fillMissingDurations(ytDlp: String?) {
+        guard let ytDlp, !backfilling else { return }
+        let missing = items.filter { $0.duration == nil && !$0.isPlaylist }.prefix(12).map { ($0.id, $0.url) }
+        guard !missing.isEmpty else { return }
+        backfilling = true
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            for (id, url) in missing {
+                let p = Process()
+                p.executableURL = URL(fileURLWithPath: ytDlp)
+                p.arguments = ["--no-warnings", "--no-playlist", "--skip-download", "--print", "%(duration)s"]
+                    + DownloadManager.jsRuntimeArgs() + [url]
+                var env = ProcessInfo.processInfo.environment
+                env["PATH"] = DownloadManager.toolSearchPath(ytDlp: ytDlp)
+                p.environment = env
+                let out = Pipe()
+                p.standardOutput = out
+                p.standardError = Pipe()
+                guard (try? p.run()) != nil else { continue }
+                let data = out.fileHandleForReading.readDataToEndOfFile()
+                p.waitUntilExit()
+                guard p.terminationStatus == 0, let text = String(data: data, encoding: .utf8),
+                      let seconds = Double(text.trimmingCharacters(in: .whitespacesAndNewlines)) else { continue }
+                DispatchQueue.main.async { self?.apply(title: nil, duration: seconds, to: id) }
+            }
+            DispatchQueue.main.async { self?.backfilling = false }
+        }
+    }
+    private var backfilling = false
 
     private func storeThumbnail(_ data: Data, for id: UUID) {
         guard let index = items.firstIndex(where: { $0.id == id }),
@@ -208,6 +302,10 @@ struct HistoryView: View {
     @ObservedObject private var languageSettings = LanguageSettings.shared
 
     @State private var confirmingClear = false
+    @State private var dayToClear: Date?
+    @State private var hoveredItem: UUID?
+    @State private var hoveredDay: Date?
+    @State private var missingItem: UUID?
     @State private var collapsedDays: Set<Date> = []
 
     /// Entries grouped by day, newest day first.
@@ -259,6 +357,7 @@ struct HistoryView: View {
                 .background(AlwaysVisibleScroller())
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(maxHeight: .infinity, alignment: .top)
             HStack {
                 Button(tr("Очистить историю")) { confirmingClear = true }
                     .buttonStyle(.plain)
@@ -271,12 +370,23 @@ struct HistoryView: View {
             }
             .padding(EdgeInsets(top: 12, leading: 24, bottom: 16, trailing: 24))
         }
-        .frame(width: 560, height: 540)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .alert(tr("Очистить историю?"), isPresented: $confirmingClear) {
             Button(tr("Очистить"), role: .destructive) { history.clear() }
             Button(tr("Отмена"), role: .cancel) {}
         } message: {
             Text(tr("Список будет удалён. Скачанные файлы не затрагиваются."))
+        }
+        .alert(trf("Очистить записи за %@?", dayToClear.map { dayTitle($0).lowercased() } ?? ""),
+               isPresented: Binding(get: { dayToClear != nil }, set: { if !$0 { dayToClear = nil } })) {
+            Button(tr("Очистить"), role: .destructive) {
+                if let day = dayToClear { history.removeDay(day) }
+                dayToClear = nil
+            }
+            Button(tr("Отмена"), role: .cancel) { dayToClear = nil }
+        } message: {
+            Text(trf("Записи за %@ будут удалены из списка. Скачанные файлы не затрагиваются.",
+                     dayToClear.map { dayTitle($0).lowercased() } ?? ""))
         }
     }
 
@@ -307,6 +417,18 @@ struct HistoryView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 }
+                Button { dayToClear = day } label: {
+                    Image(systemName: "trash")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 22, height: 20)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                // Like the cross on an entry: only while the pointer is over this day.
+                .opacity(hoveredDay == day ? 1 : 0)
+                .allowsHitTesting(hoveredDay == day)
+                .help(trf("Очистить записи за %@", dayTitle(day).lowercased()))
             }
             if count > DownloadHistory.dayLimit {
                 Text(tr("За этот день больше 100 записей. Можно очистить."))
@@ -318,6 +440,11 @@ struct HistoryView: View {
             }
         }
         .padding(.top, 10)
+        .onHover { inside in
+            withAnimation(.easeOut(duration: 0.12)) {
+                if inside { hoveredDay = day } else if hoveredDay == day { hoveredDay = nil }
+            }
+        }
     }
 
     private func row(_ item: HistoryItem) -> some View {
@@ -332,8 +459,14 @@ struct HistoryView: View {
                         } else {
                             Text(item.audioOnly ? tr("Звук") : tr("Видео"))
                         }
-                        Text("·")
-                        Text(item.date.formatted(date: .omitted, time: .shortened))
+                        if let size = item.fileSize, size > 0 {
+                            Text("·")
+                            Text(ContentView.formatBytes(size))
+                        }
+                        if missingItem == item.id {
+                            Text("·")
+                            Text(tr("Файл не найден")).foregroundStyle(.red)
+                        }
                     }
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -356,6 +489,56 @@ struct HistoryView: View {
             .contentShape(RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
+        .overlay(alignment: .topTrailing) {
+            if hoveredItem == item.id {
+                HStack(spacing: 6) {
+                    // Show the file in Finder (or say that it isn't there any more).
+                    Button {
+                        if FileReveal.show(history.fileURL(for: item)) {
+                            missingItem = nil
+                        } else {
+                            missingItem = item.id
+                            let id = item.id
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { if missingItem == id { missingItem = nil } }
+                        }
+                    } label: {
+                        Image(systemName: "folder")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 20, height: 20)
+                            .background(Circle().fill(Color.primary.opacity(0.1)))
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(tr("Показать в папке"))
+                    Button { history.remove(id: item.id) } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 20, height: 20)
+                            .background(Circle().fill(Color.primary.opacity(0.1)))
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(tr("Удалить из истории"))
+                }
+                .padding(8)
+                .transition(.opacity)
+            } else {
+                Text(item.date.formatted(date: .omitted, time: .shortened))
+                    .font(.caption2)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 11)
+                    .padding(.trailing, 14)
+                    .allowsHitTesting(false)
+            }
+        }
+        .onHover { inside in
+            withAnimation(.easeOut(duration: 0.12)) {
+                if inside { hoveredItem = item.id } else if hoveredItem == item.id { hoveredItem = nil }
+            }
+        }
     }
 
     @ViewBuilder
@@ -374,5 +557,18 @@ struct HistoryView: View {
         }
         .frame(width: 96, height: 54)
         .clipShape(RoundedRectangle(cornerRadius: 6))
+        // The length of the video, in the corner of the cover (not next to the time it was downloaded).
+        .overlay(alignment: .bottomTrailing) {
+            if !item.isPlaylist, let seconds = item.duration, seconds > 0 {
+                Text(ClipSection.clock(seconds))
+                    .font(.system(size: 10, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(RoundedRectangle(cornerRadius: 4).fill(Color.black.opacity(0.72)))
+                    .padding(4)
+            }
+        }
     }
 }

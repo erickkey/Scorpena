@@ -24,6 +24,8 @@ struct QueuedDownload: Identifiable {
     var knownTitle: String? = nil
     var thumbnail: URL? = nil
     var playlist: PlaylistInfo? = nil
+    /// Set when only a part of the video is wanted.
+    var section: ClipSection? = nil
 
     var title: String { URL(string: url)?.host ?? url }
     var formatLabel: String { audioOnly ? audioFormat.title : videoFormat.title }
@@ -86,6 +88,23 @@ final class DownloadQueue: ObservableObject {
     var managers: [DownloadManager] { (primary.map { [$0] } ?? []) + extras }
     var busyCount: Int { managers.filter { $0.isRunning || $0.isPaused }.count }
 
+    static let openFolderKey = "openFolderWhenDone"
+    /// Files finished since the queue last went quiet (for «open the folder when it's all done»).
+    private var finishedFiles: [URL] = []
+
+    /// Called when nothing is running or waiting any more: shows what came down, if the setting is on.
+    private func revealIfAllDone() {
+        guard busyCount == 0, items.isEmpty else { return }
+        let files = finishedFiles
+        finishedFiles = []
+        guard UserDefaults.standard.bool(forKey: Self.openFolderKey), !files.isEmpty else { return }
+        if files.count <= 20 {
+            NSWorkspace.shared.activateFileViewerSelecting(files)
+        } else if let folder = files.last?.deletingLastPathComponent() {
+            NSWorkspace.shared.open(folder)
+        }
+    }
+
     func attach(_ manager: DownloadManager) {
         guard primary == nil else { return }
         primary = manager
@@ -113,6 +132,7 @@ final class DownloadQueue: ObservableObject {
         var playlistThumbnail: String?
         var playlistDone: Int?   // videos of this playlist already finished before the save
         var paused: Bool?        // was on pause when saved
+        var section: ClipSection?
     }
 
     private static var storeURL: URL {
@@ -136,7 +156,8 @@ final class DownloadQueue: ObservableObject {
                       playlistID: $0.playlist?.id, playlistTitle: $0.playlist?.title,
                       playlistURL: $0.playlist?.listURL, playlistThumbnail: $0.playlist?.thumbnail?.absoluteString,
                       playlistDone: $0.playlist.flatMap { playlistSucceeded[$0.id] },
-                      paused: pausedIDs.contains($0.id))
+                      paused: pausedIDs.contains($0.id),
+                      section: $0.section)
         }
         if let data = try? JSONEncoder().encode(saved) { try? data.write(to: url, options: .atomic) }
     }
@@ -154,7 +175,8 @@ final class DownloadQueue: ObservableObject {
                            playlist: item.playlistID.map { id in
                                PlaylistInfo(id: id, title: item.playlistTitle, listURL: item.playlistURL ?? "",
                                             thumbnail: item.playlistThumbnail.flatMap(URL.init(string:)))
-                           })
+                           },
+                           section: item.section)
         }
         for item in saved {
             if let id = item.playlistID, let done = item.playlistDone, done > 0 {
@@ -193,6 +215,27 @@ final class DownloadQueue: ObservableObject {
             item.audioOnly == audioOnly && item.url.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == wanted
         }
         return items.contains(where: same) || running.contains { same($0.item) }
+    }
+
+    /// Like `submit`, but when this link was already downloaded with the same choices and the
+    /// file is still there, asks first: show the file, or download it once more.
+    func submitUnlessDownloaded(_ item: QueuedDownload, onSubmitted: @escaping () -> Void = {}) {
+        guard let file = DownloadHistory.shared.existingFile(url: item.url, settingsKey: item.settingsKey) else {
+            submit(item)
+            onSubmitted()
+            return
+        }
+        AlreadyDownloadedPanel.shared.ask(file: file) { choice in
+            switch choice {
+            case .show:
+                FileReveal.show(file)
+            case .again:
+                self.submit(item)
+                onSubmitted()
+            case .cancel:
+                break
+            }
+        }
     }
 
     func submit(_ newItems: [QueuedDownload]) {
@@ -373,7 +416,8 @@ final class DownloadQueue: ObservableObject {
                 manager.restorePaused(UnfinishedDownload(
                     url: item.url, destination: item.destination.path, maxHeight: item.maxHeight,
                     audioOnly: item.audioOnly, stripAudio: item.stripAudio,
-                    videoFormat: item.videoFormat.rawValue, audioFormat: item.audioFormat.rawValue, name: nil))
+                    videoFormat: item.videoFormat.rawValue, audioFormat: item.audioFormat.rawValue, name: nil,
+                    section: item.section))
                 continue
             }
             manager.start(urlString: item.url,
@@ -382,7 +426,8 @@ final class DownloadQueue: ObservableObject {
                           audioOnly: item.audioOnly,
                           stripAudio: item.stripAudio,
                           videoFormat: item.videoFormat,
-                          audioFormat: item.audioFormat)
+                          audioFormat: item.audioFormat,
+                          section: item.section)
         }
     }
 
@@ -446,6 +491,7 @@ final class DownloadQueue: ObservableObject {
                 if let playlist = job.item.playlist {
                     self.finishPlaylistIfDone(playlist.id)
                 }
+                if succeeded, let file = manager?.lastDownloadedFile { self.finishedFiles.append(file) }
                 let preview = self.previews[job.item.id]
                 self.finished.insert(
                     FinishedDownload(title: preview?.title ?? job.item.title,
@@ -460,6 +506,7 @@ final class DownloadQueue: ObservableObject {
                 self.previews[job.item.id] = nil
             }
             self.startWhilePossible()
+            self.revealIfAllDone()
         }
     }
 }
@@ -507,7 +554,7 @@ final class DownloadsPanel {
         win.title = tr("Загрузки")
         win.isReleasedWhenClosed = false
         win.isRestorable = false
-        win.setContentSize(NSSize(width: 560, height: 590))
+        win.setContentSize(NSSize(width: 560, height: 700))
         win.centerExactlyOnScreen()
         win.makeKeyAndOrderFront(nil)
         window = win
@@ -543,12 +590,116 @@ struct DownloadsView: View {
             }
             .padding(.top, 14)
             .padding(.bottom, 2)
-            switch tabState.tab {
-            case .queue:   QueueView(manager: manager, onClose: onClose)
-            case .history: HistoryView(onPick: onPick, onClose: onClose)
+            Group {
+                switch tabState.tab {
+                case .queue:   QueueView(manager: manager, onClose: onClose)
+                case .history: HistoryView(onPick: onPick, onClose: onClose)
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(width: 560, height: 590)
+        .frame(width: 560, height: 700, alignment: .top)
+        .onAppear { DownloadHistory.shared.fillMissingDurations(ytDlp: manager.ytDlpPath) }
+    }
+}
+
+/// The link field and the format choice of the main window, repeated here: links can be
+/// added to the queue without going back to the main window. (Its own field — links are
+/// added one after another, and the main window's field stays as it is.)
+private struct QueueAdder: View {
+    @State private var link = ""
+    @State private var note: String?
+    @StateObject private var prober = DownloadManager()      // checks the quality of the typed link
+    @AppStorage(VideoFormat.key) private var videoFormat = VideoFormat.mp4.rawValue
+    @AppStorage(AudioFormat.key) private var audioFormat = AudioFormat.mp3.rawValue
+    @AppStorage("downloadMode") private var downloadMode = "video"
+    @AppStorage("videoNoAudio") private var videoNoAudio = false
+    @AppStorage("qualityHeight") private var qualityHeight = 0
+    @AppStorage("destinationFolder") private var destinationPath: String =
+        (FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first?.path) ?? NSHomeDirectory()
+    @ObservedObject private var languageSettings = LanguageSettings.shared
+
+    private var usable: Bool { ContentView.isPlausibleURLString(link) }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "link").font(.title3).foregroundStyle(.secondary)
+                TextField(tr("Вставь ссылку на видео"), text: $link)
+                    .textFieldStyle(.plain)
+                    .font(.title3)
+                    .lineLimit(1)
+                    .disableAutocorrection(true)
+                    .onSubmit { add() }
+                    .onChange(of: link) { _ in prober.resetProbe() }
+                Button { add() } label: { Text(tr("Добавить в очередь")).lineLimit(1) }
+                    .buttonStyle(PrimaryPillStyle())
+                    .disabled(!usable)
+            }
+            .padding(.leading, 14)
+            .padding(.trailing, 6)
+            .padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .textBackgroundColor)))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color(nsColor: .separatorColor)))
+
+            HStack(spacing: 20) {
+                FormatSegments(title: tr("Видео"),
+                               options: VideoFormat.allCases.map { ($0.rawValue, $0.title) },
+                               selected: videoFormat, active: downloadMode == "video", disabled: false) { picked in
+                    videoFormat = picked
+                    downloadMode = "video"
+                }
+                FormatSegments(title: tr("Звук"),
+                               options: AudioFormat.allCases.map { ($0.rawValue, $0.title) },
+                               selected: audioFormat, active: downloadMode == "audio", disabled: false) { picked in
+                    audioFormat = picked
+                    downloadMode = "audio"
+                }
+            }
+
+            // Like the main window: no sound · quality — one quiet line.
+            HStack(spacing: 8) {
+                Toggle(tr("без звука"), isOn: $videoNoAudio)
+                    .toggleStyle(.checkbox)
+                    .disabled(downloadMode == "audio")
+                Text("·")
+                QualityPicker(manager: prober, link: link, height: $qualityHeight)
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            Text(note ?? " ")
+                .font(.caption)
+                .foregroundStyle(.green)
+        }
+    }
+
+    private func add() {
+        let url = link.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard ContentView.isPlausibleURLString(url) else { return }
+        if PlaylistLink.detect(url) != nil {
+            show(tr("Плейлисты добавляются из главного окна."))
+            return
+        }
+        let audioOnly = downloadMode == "audio"
+        // Before a check the picker only says «Максимально доступное» — honour that, like the main window.
+        let height = prober.availableHeights.isEmpty ? nil : (qualityHeight == 0 ? nil : qualityHeight)
+        let item = QueuedDownload(url: url, destination: URL(fileURLWithPath: destinationPath), maxHeight: height,
+                                  audioOnly: audioOnly, stripAudio: videoNoAudio && !audioOnly,
+                                  videoFormat: .current, audioFormat: .current)
+        if DownloadQueue.shared.isActive(url: url, audioOnly: audioOnly) {
+            show(tr("Эта ссылка уже скачивается или стоит в очереди"))
+            return
+        }
+        DownloadQueue.shared.submitUnlessDownloaded(item) {
+            link = ""
+            show(tr("Добавлено в очередь"))
+        }
+    }
+
+    private func show(_ text: String) {
+        note = text
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { if note == text { note = nil } }
     }
 }
 
@@ -558,13 +709,19 @@ struct QueueView: View {
 
     @ObservedObject private var queue = DownloadQueue.shared
     @ObservedObject private var languageSettings = LanguageSettings.shared
+    @State private var missingFile: UUID?
 
     var body: some View {
         VStack(spacing: 0) {
+            // Top to bottom: the title, where the next link is added, then the queue itself.
+            WindowTitleRow(title: tr("Очередь загрузок"))
+                .padding(EdgeInsets(top: 22, leading: 24, bottom: 10, trailing: 24))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            QueueAdder()
+                .padding(EdgeInsets(top: 0, leading: 24, bottom: 12, trailing: 24))
+            ThinLine().padding(.horizontal, 24)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
-                    WindowTitleRow(title: tr("Очередь загрузок"))
-                        .padding(.bottom, 4)
                     if queue.busyCount == 0 && queue.items.isEmpty {
                         Text(tr("Очередь пуста"))
                             .foregroundStyle(.secondary)
@@ -577,6 +734,9 @@ struct QueueView: View {
                     }
                     ForEach(queue.items) { waitingCard($0) }
                     if !queue.finished.isEmpty {
+                        if queue.busyCount > 0 || !queue.items.isEmpty {
+                            ThinLine().padding(.top, 6)
+                        }
                         HStack {
                             Text(tr("Недавно завершённые")).font(.subheadline.weight(.semibold))
                             Spacer()
@@ -589,9 +749,11 @@ struct QueueView: View {
                         ForEach(queue.finished) { finishedCard($0) }
                     }
                 }
-                .padding(EdgeInsets(top: 22, leading: 24, bottom: 8, trailing: 24))
+                .padding(EdgeInsets(top: 14, leading: 24, bottom: 8, trailing: 24))
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(maxHeight: .infinity, alignment: .top)
+            ThinLine().padding(.horizontal, 24)
             HStack(spacing: 10) {
                 // The managers' own state isn't published through the queue, so look again twice a second.
                 TimelineView(.periodic(from: .now, by: 0.5)) { _ in
@@ -619,7 +781,7 @@ struct QueueView: View {
             }
             .padding(EdgeInsets(top: 12, leading: 24, bottom: 16, trailing: 24))
         }
-        .frame(width: 560, height: 540)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func waitingCard(_ item: QueuedDownload) -> some View {
@@ -641,9 +803,14 @@ struct QueueView: View {
                      image: item.image,
                      progress: item.succeeded ? 1 : nil,
                      statusIcon: item.succeeded ? "checkmark.circle.fill" : "xmark.circle",
-                     status: item.note) {
+                     status: missingFile == item.id ? tr("Файл не найден") : item.note) {
             if let file = item.fileURL {
-                CardButton(title: tr("Показать файл")) { NSWorkspace.shared.activateFileViewerSelecting([file]) }
+                CardButton(title: tr("Показать файл")) {
+                    if !FileReveal.show(file) {
+                        missingFile = item.id
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { if missingFile == item.id { missingFile = nil } }
+                    }
+                }
             }
             CardButton(systemImage: "xmark", help: tr("Убрать из списка")) { queue.removeFinished(item.id) }
         }
@@ -667,6 +834,8 @@ private struct RunningCard: View {
                          subtitle: format.map { host + " – " + $0 } ?? host,
                          image: preview?.image,
                          progress: manager.progress,
+                         creeping: manager.isRunning && !manager.isPaused,
+                         startedAt: manager.isRunning && !manager.isPaused ? manager.downloadStartTime : nil,
                          statusIcon: manager.isPaused ? "pause.circle" : "arrow.down.circle",
                          status: manager.isPaused ? tr("Пауза — нажми «Продолжить»") : manager.statusLine) {
                 if manager.isPaused {
@@ -690,17 +859,20 @@ private struct CardButton: View {
 
     var body: some View {
         Button(action: action) {
-            if let systemImage {
-                Image(systemName: systemImage).font(.system(size: 12, weight: .semibold))
-            } else if let title {
-                Text(title).font(.caption.weight(.medium))
+            Group {
+                if let systemImage {
+                    Image(systemName: systemImage).font(.system(size: 12, weight: .semibold))
+                } else if let title {
+                    Text(title).font(.caption.weight(.medium)).lineLimit(1).fixedSize()
+                }
             }
+            .foregroundStyle(.white)
+            .padding(.horizontal, systemImage == nil ? 10 : 8)
+            .padding(.vertical, 5)
+            .background(Capsule().fill(Color.white.opacity(0.18)))
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(.white)
-        .padding(.horizontal, systemImage == nil ? 8 : 6)
-        .padding(.vertical, 3)
-        .background(Capsule().fill(Color.white.opacity(0.18)))
         .help(help)
     }
 }
@@ -711,6 +883,9 @@ private struct DownloadCard<Actions: View>: View {
     let subtitle: String
     let image: NSImage?
     let progress: Double?
+    var creeping = false
+    /// When set, a running count of seconds is shown at the end of the status row.
+    var startedAt: Date? = nil
     let statusIcon: String
     let status: String
     @ViewBuilder var actions: Actions
@@ -752,18 +927,21 @@ private struct DownloadCard<Actions: View>: View {
                 .padding(10)
                 Spacer(minLength: 0)
                 if let progress {
-                    GeometryReader { proxy in
-                        ZStack(alignment: .leading) {
-                            Rectangle().fill(Color.white.opacity(0.25))
-                            Rectangle().fill(Color.red).frame(width: proxy.size.width * min(max(progress, 0), 1))
-                        }
-                    }
-                    .frame(height: 3)
+                    SmoothBar(value: progress, creeping: creeping, height: 3, tint: .red,
+                              track: Color.white.opacity(0.25), square: true)
                 }
                 HStack(spacing: 6) {
                     Image(systemName: statusIcon)
-                    Text(status).lineLimit(1)
+                    Text(status).lineLimit(1).monospacedDigit()
                     Spacer(minLength: 0)
+                    // The same «the app hasn't frozen» counter as under the bar of the main window.
+                    if let startedAt {
+                        TimelineView(.periodic(from: startedAt, by: 1)) { context in
+                            Text("\(max(0, Int(context.date.timeIntervalSince(startedAt)))) " + tr("с"))
+                                .monospacedDigit()
+                                .foregroundStyle(.white.opacity(0.6))
+                        }
+                    }
                 }
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.9))
@@ -775,5 +953,63 @@ private struct DownloadCard<Actions: View>: View {
         .frame(height: 104)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.white.opacity(0.12)))
+    }
+}
+
+
+// MARK: - «Файл уже скачан»
+
+enum AlreadyDownloadedChoice { case show, again, cancel }
+
+final class AlreadyDownloadedPanel {
+    static let shared = AlreadyDownloadedPanel()
+    private var window: NSWindow?
+    private var closeObserver: NSObjectProtocol?
+    private var answered = false
+
+    func ask(file: URL, onChoice: @escaping (AlreadyDownloadedChoice) -> Void) {
+        NSApp.activate(ignoringOtherApps: true)
+        window?.close()
+        answered = false
+
+        func finish(_ choice: AlreadyDownloadedChoice) {
+            guard !answered else { return }
+            answered = true
+            window?.close()
+            onChoice(choice)
+        }
+
+        let win = makeDialogWindow(AlreadyDownloadedView(fileName: file.lastPathComponent, onChoose: finish))
+        win.makeKeyAndOrderFront(nil)
+        window = win
+
+        if let closeObserver { NotificationCenter.default.removeObserver(closeObserver) }
+        closeObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification, object: win, queue: .main
+        ) { _ in finish(.cancel) }
+    }
+}
+
+private struct AlreadyDownloadedView: View {
+    let fileName: String
+    let onChoose: (AlreadyDownloadedChoice) -> Void
+
+    @ObservedObject private var languageSettings = LanguageSettings.shared
+
+    var body: some View {
+        DialogLayout(title: tr("Файл уже скачан"),
+                     message: tr("Ты уже скачивал это видео с такими же настройками. Файл лежит в папке."),
+                     width: 480,
+                     extra: {
+            Text(fileName)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .truncationMode(.middle)
+                .multilineTextAlignment(.center)
+        }, buttons: {
+            DialogButton(title: tr("Скачать ещё раз")) { onChoose(.again) }
+            DialogButton(title: tr("Показать в папке"), primary: true) { onChoose(.show) }
+        })
     }
 }

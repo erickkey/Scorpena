@@ -26,13 +26,16 @@ struct ContentView: View {
     @AppStorage(AudioFormat.key) private var audioFormat = AudioFormat.mp3.rawValue
     @AppStorage("downloadMode") private var downloadMode = "video"      // video | audio — what «Скачать» saves
     @AppStorage("lastSeenChangelogVersion") private var lastSeenChangelogVersion = ""
-    @AppStorage("appearance") private var appearance = "auto"   // auto | light | dark
+    @AppStorage("appearance") private var appearance = "auto"   // auto (the system's) | light | dark
+    @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var languageSettings = LanguageSettings.shared   // unused directly — just
                                                                  // makes SwiftUI re-render this view (and
                                                                  // every tr()/trf() call in it) when the
                                                                  // language changes anywhere in the app.
 
     @State private var urlString = ""
+    @State private var qualityCheckWork: DispatchWorkItem?
+    @State private var fileMissingNote = false
     @State private var lastSeenPasteboardChange = -1
     /// Clipboard state when a link went into the queue — that same link must
     /// not be pasted back into the freshly emptied field.
@@ -80,10 +83,30 @@ struct ContentView: View {
         return tr("Максимальное")
     }
 
-    private static func formatBytes(_ bytes: Int64) -> String {
+    /// «850 КБ», «1,4 МБ», «38 МБ», «1,25 ГБ» — never «0 МБ» for something small.
+    static func formatBytes(_ bytes: Int64) -> String {
+        let parts = formatBytesParts(bytes)
+        return parts.number + " " + parts.unit
+    }
+
+    /// The number and the unit apart, so that «10 из 558 МБ» can say the unit once.
+    static func formatBytesParts(_ bytes: Int64) -> (number: String, unit: String) {
         let mb = Double(bytes) / 1_000_000
-        if mb >= 1000 { return String(format: tr("%.2f ГБ"), mb / 1000) }
-        return String(format: tr("%.0f МБ"), mb)
+        func localized(_ text: String) -> String {
+            LanguageSettings.shared.language == .en ? text : text.replacingOccurrences(of: ".", with: ",")
+        }
+        if mb >= 1000 { return (localized(String(format: "%.2f", mb / 1000)), tr("ГБ")) }
+        if mb >= 10 { return (String(format: "%.0f", mb), tr("МБ")) }
+        if mb >= 1 { return (localized(String(format: "%.1f", mb)), tr("МБ")) }
+        return (String(format: "%.0f", max(1, Double(bytes) / 1000)), tr("КБ"))
+    }
+
+    /// «≈ 10 из 558 МБ» (the sign only while the total is a guess; the unit once when it is the same).
+    static func progressAmounts(done: Int64, total: Int64, approximate: Bool) -> String {
+        let d = formatBytesParts(done), t = formatBytesParts(total)
+        let text = d.unit == t.unit ? "\(d.number) " + tr("из") + " \(t.number) \(t.unit)"
+                                    : "\(d.number) \(d.unit) " + tr("из") + " \(t.number) \(t.unit)"
+        return approximate ? "≈ " + text : text
     }
 
     private var destinationURL: URL { URL(fileURLWithPath: destinationPath) }
@@ -120,7 +143,7 @@ struct ContentView: View {
         return url
     }
 
-    private static func isPlausibleURLString(_ raw: String) -> Bool {
+    static func isPlausibleURLString(_ raw: String) -> Bool {
         urlIfPlausible(raw) != nil
     }
 
@@ -150,7 +173,6 @@ struct ContentView: View {
         isPlausibleURL
         && updateChecker.installState == .idle
         && manager.toolsReady
-        && !manager.isProbing
     }
 
     /// `ViewThatFits(in: .vertical)` was tried here to pick a roomy layout
@@ -169,12 +191,15 @@ struct ContentView: View {
                 })
         }
         .onPreferenceChange(ContentHeightKey.self) { windowFitter.fit(toContent: $0) }
+        // The link field is shared with the clip window: typing in either shows up in both.
+        .onChange(of: urlString) { LinkField.shared.text = $0 }
+        .onReceive(LinkField.shared.$text) { if $0 != urlString { urlString = $0 } }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button {
-                    DownloadsPanel.shared.show(manager: manager) { picked in urlString = picked }
+                    DownloadsPanel.shared.show(manager: manager, tab: .queue) { picked in urlString = picked }
                 } label: {
-                    Image(systemName: "list.bullet")
+                    ToolbarIcon(name: "queue")
                         .overlay(alignment: .topTrailing) {
                             let count = queue.items.count + queue.busyCount
                             if count > 0 {
@@ -187,17 +212,33 @@ struct ContentView: View {
                             }
                         }
                 }
-                .help(tr("Загрузки"))
+                .help(tr("Очередь загрузок"))
+                // History is its own button: the same window, opened on its own tab.
+                Button {
+                    DownloadsPanel.shared.show(manager: manager, tab: .history) { picked in urlString = picked }
+                } label: {
+                    ToolbarIcon(name: "history")
+                }
+                .help(tr("История скачиваний"))
+                Button {
+                    LinkField.shared.text = urlString
+                    TrimPanel.shared.show(manager: manager)
+                } label: {
+                    ToolbarIcon(name: "scissors")
+                }
+                .help(tr("Вырезать фрагмент"))
                 Button {
                     AdvancedSettingsPanel.shared.show(manager: manager)
                 } label: {
-                    Image(systemName: "gearshape")
+                    ToolbarIcon(name: "settings")
                 }
                 .help(tr("Дополнительно"))
+                // Sun or moon, whichever you would switch to. Until the first press the app simply
+                // follows the system's theme (the icon follows it too).
                 Button {
-                    appearance = (appearance == "dark") ? "light" : "dark"
+                    appearance = (colorScheme == .dark) ? "light" : "dark"
                 } label: {
-                    Image(systemName: appearance == "dark" ? "sun.max" : "moon")
+                    ToolbarIcon(name: colorScheme == .dark ? "sun" : "moon")
                 }
                 .help(tr("Светлая / тёмная тема"))
             }
@@ -218,15 +259,42 @@ struct ContentView: View {
             Cleanup.checkOnLaunch(queue: queue)
             manager.refreshTools()
             manager.autoUpdateToolsIfDue()
-            if appearance == "auto" {
-                appearance = Self.systemIsDark() ? "dark" : "light"
-            }
             applyAppearance()
             updateChecker.check()
             playLaunchSound()
             fillURLFromClipboard()
             DispatchQueue.main.async {
                 runLaunchWindowSequenceWhenActive()
+            }
+            // DEV-TEST-HOOK (remove before shipping): opens the clip window on a link.
+            // DEV-TEST-HOOK (remove before shipping): downloads a link and writes the bar's values to a file.
+            if let links = ProcessInfo.processInfo.environment["SCORPENA_AUTODL"] {
+                let logPath = ProcessInfo.processInfo.environment["SCORPENA_PROGRESS_LOG"]
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    let dest = URL(fileURLWithPath: ProcessInfo.processInfo.environment["SCORPENA_TRIM_DIR"] ?? destinationURL.path)
+                    queue.submit(links.split(separator: " ").map { link in
+                        QueuedDownload(url: String(link), destination: dest, maxHeight: nil, audioOnly: false,
+                                       stripAudio: false, videoFormat: .mp4, audioFormat: .mp3)
+                    })
+                    guard let logPath else { return }
+                    var lines = ""
+                    Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { timer in
+                        lines += String(format: "%.3f | %@ | %@\n", manager.progress, manager.statusLine, manager.lastDownloadedFile?.path ?? "-")
+                        try? lines.write(toFile: logPath, atomically: true, encoding: .utf8)
+                        if !manager.isRunning && manager.progress >= 1 { timer.invalidate() }
+                    }
+                }
+            }
+            if let tab = ProcessInfo.processInfo.environment["SCORPENA_OPEN_DOWNLOADS"] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    DownloadsPanel.shared.show(manager: manager, tab: tab == "history" ? .history : .queue) { _ in }
+                }
+            }
+            if let link = ProcessInfo.processInfo.environment["SCORPENA_TRIM_TEST"] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    LinkField.shared.text = link
+                    TrimPanel.shared.show(manager: manager)
+                }
             }
         }
         .onChange(of: appearance) { _ in applyAppearance() }
@@ -659,6 +727,7 @@ struct ContentView: View {
                     .onChange(of: urlString) { _ in
                         manager.resetProbe()
                         showAccessHint = false
+                        scheduleQualityCheck()
                     }
                 Button {
                     startDownload(audioOnly: downloadMode == "audio")
@@ -735,6 +804,19 @@ struct ContentView: View {
         }
     }
 
+    /// The qualities of a link are looked up by themselves, a moment after it is pasted or typed
+    /// (the wait is so that half-typed links aren't checked).
+    private func scheduleQualityCheck() {
+        qualityCheckWork?.cancel()
+        guard isPlausibleURL, !isBareHomepage else { return }
+        let work = DispatchWorkItem {
+            guard isPlausibleURL, !isBareHomepage, manager.availableHeights.isEmpty, !manager.isProbing else { return }
+            manager.probeQuality(urlString: urlString)
+        }
+        qualityCheckWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: work)
+    }
+
     private var folderName: String {
         let name = URL(fileURLWithPath: destinationPath).lastPathComponent
         return name.isEmpty ? destinationPath : name
@@ -774,7 +856,6 @@ struct ContentView: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
-            .help(tr("Необязательно — можно сразу нажать «Скачать».\nПроверка займёт немного времени, зато сразу покажет все доступные варианты качества и размер файла."))
             .onChange(of: manager.availableHeights) { heights in
                 if qualityHeight != 0, !heights.contains(qualityHeight) {
                     qualityHeight = 0
@@ -805,7 +886,7 @@ struct ContentView: View {
     private var batchProgressSection: some View {
         TimelineView(.periodic(from: .now, by: 0.5)) { context in
             VStack(alignment: .leading, spacing: 4) {
-                ProgressView(value: queue.batchFraction())
+                SmoothBar(value: queue.batchFraction())
                 HStack(alignment: .firstTextBaseline, spacing: 14) {
                     // The running time comes first, the same «the app hasn't frozen» sign as with one download.
                     Text(Self.elapsedText(context.date.timeIntervalSince(batchStartTime ?? context.date)) + " · "
@@ -837,30 +918,40 @@ struct ContentView: View {
             if manager.isRunning && manager.indeterminate {
                 ProgressView().progressViewStyle(.linear)
             } else {
-                ProgressView(value: manager.progress)
+                SmoothBar(value: manager.progress, creeping: manager.isRunning && !manager.isPaused)
             }
             HStack(alignment: .firstTextBaseline, spacing: 14) {
                 Text(manager.statusLine.isEmpty ? " " : manager.statusLine)
                     .font(.caption)
+                    .monospacedDigit()
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 8)
-                if manager.isPaused {
-                    Button(tr("Продолжить")) { manager.resume() }
-                } else {
-                    Button(tr("Пауза")) { manager.pause() }
-                        .disabled(!(manager.isRunning && manager.canPause))
-                }
-                Button(tr("Отменить")) { manager.cancel() }
-                    .disabled(!(manager.isRunning || manager.isPaused))
-                Button(tr("Показать файл")) {
-                    if let file = manager.lastDownloadedFile {
-                        NSWorkspace.shared.activateFileViewerSelecting([file])
+                // Only what can be pressed right now: nothing greyed out. While a download
+                // runs (or waits) — pause and cancel; afterwards — the file.
+                if manager.isRunning || manager.isPaused {
+                    if manager.isPaused {
+                        Button(tr("Продолжить")) { manager.resume() }
+                    } else {
+                        Button(tr("Пауза")) { manager.pause() }
+                            .disabled(!manager.canPause)
+                    }
+                    Button(tr("Отменить")) { manager.cancel() }
+                } else if let file = manager.lastDownloadedFile {
+                    if fileMissingNote {
+                        Text(tr("Файл не найден")).foregroundStyle(.red)
+                    } else {
+                        Button(tr("Показать файл")) {
+                            if !FileReveal.show(file) {
+                                fileMissingNote = true
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 3) { fileMissingNote = false }
+                            }
+                        }
                     }
                 }
-                .disabled(manager.lastDownloadedFile == nil)
             }
+            .frame(minHeight: 18)
             .buttonStyle(.plain)
             .font(.caption)
 
@@ -1074,12 +1165,13 @@ struct ContentView: View {
             return
         }
         let wasBusy = queue.busyCount > 0
-        queue.submit(item)
-        // Behind another download: the link has gone to the queue, so the field
-        // is free for the next one.
-        if wasBusy {
-            clipboardChangeAtQueue = NSPasteboard.general.changeCount
-            urlString = ""
+        queue.submitUnlessDownloaded(item) {
+            // Behind another download: the link has gone to the queue, so the field
+            // is free for the next one.
+            if wasBusy {
+                clipboardChangeAtQueue = NSPasteboard.general.changeCount
+                urlString = ""
+            }
         }
     }
 
@@ -1237,7 +1329,7 @@ final class MainWindowFitter: ObservableObject {
 
 /// A small segmented control (title + options). Only the group that holds the
 /// current download choice shows its selection.
-private struct FormatSegments: View {
+struct FormatSegments: View {
     let title: String
     let options: [(id: String, label: String)]
     let selected: String
@@ -1419,6 +1511,7 @@ struct AdvancedSettingsView: View {
     @AppStorage(DiagnosticReporter.enabledKey) private var sendDiagnostics = true
     @AppStorage("muteLaunchSound") private var muteLaunchSound = false
     @AppStorage(SpeedLimit.key) private var speedStep = SpeedLimit.defaultStep
+    @AppStorage(DownloadQueue.openFolderKey) private var openFolderWhenDone = false
     @AppStorage(Cleanup.Reminder.key) private var cleanupReminder = Cleanup.Reminder.weekly.rawValue
     @State private var cleanupNote: String?
     @ObservedObject private var languageSettings = LanguageSettings.shared
@@ -1428,6 +1521,7 @@ struct AdvancedSettingsView: View {
             VStack(alignment: .leading, spacing: 12) {
                 notificationsBlock.card()
                 speedBlock.card()
+                openFolderBlock.card()
                 cleanupBlock.card()
                 toolsBlock.card()
                 languageBlock.card()
@@ -1469,6 +1563,17 @@ struct AdvancedSettingsView: View {
         Toggle(title, isOn: isOn)
             .toggleStyle(.checkbox)
             .font(.callout)
+    }
+
+    private var openFolderBlock: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle(tr("Открывать папку после загрузки"), isOn: $openFolderWhenDone)
+                .toggleStyle(.checkbox)
+            Text(tr("Одно видео — сразу. Плейлист или очередь — когда скачается всё."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.leading, 20)
+        }
     }
 
     private var speedBlock: some View {
@@ -1927,9 +2032,12 @@ struct AboutView: View {
                         Text("video downloader").font(.callout).foregroundStyle(.secondary)
                     }
                 }
-                Text("by Yaroslav Lukyanov")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("by Yaroslav Lukyanov")
+                    Text(tr("При поддержке Александра Семёнова (opragopa)"))
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
                 Text(tr("Скопируй ссылку и нажми «Скачать»"))
                     .font(.callout.weight(.semibold).italic())
                     .foregroundColor(.accentColor)

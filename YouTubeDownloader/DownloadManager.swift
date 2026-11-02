@@ -124,6 +124,18 @@ final class DownloadManager: ObservableObject {
     private var pendingStripAudio = false
     private var pendingVideoFormat: VideoFormat = .mp4
     private var pendingAudioFormat: AudioFormat = .mp3
+    private var pendingSection: ClipSection?
+
+    // One bar for the whole job, from the first byte to the finished file. yt-dlp counts every
+    // stream (video, then sound) from 0 to 100 on its own, and the re-encoding counts again, so the
+    // job is laid out on one scale: the streams share the first 80%, joining takes the next 10%,
+    // and the 10% left is for the re-encoding to H.264 when one is needed.
+    private var streamIndex = -1
+    private var streamsExpected = 1
+    private let prepBand = 0.08         // the first part of the bar belongs to the preparation (it creeps there)
+    private let downloadBand = 0.8
+    private var transcodeFraction = 0.0
+    private var streamSizes: [Double] = []      // bytes of each stream, as yt-dlp reports them
     /// How many downloads share the speed limit right now (set by the queue).
     var speedShare: (DownloadManager) -> Int = { _ in 1 }
     /// Playlist videos are recorded in the history as one playlist entry, not one by one.
@@ -134,7 +146,7 @@ final class DownloadManager: ObservableObject {
     private var resumeAfterPause = false       // a "pause" that is really a restart (new speed limit)
     private var restartStartTime: Date?
     private var speedApplyWork: DispatchWorkItem?
-    private var downloadStartTime: Date?
+    private(set) var downloadStartTime: Date?
     private var cookieQueue: [CookieSource] = []
     private var currentCookieSource: CookieSource = .none
     private var downloadAttempt = 0
@@ -270,7 +282,8 @@ final class DownloadManager: ObservableObject {
               audioOnly: saved.audioOnly,
               stripAudio: saved.stripAudio,
               videoFormat: VideoFormat(rawValue: saved.videoFormat) ?? .mp4,
-              audioFormat: AudioFormat(rawValue: saved.audioFormat) ?? .mp3)
+              audioFormat: AudioFormat(rawValue: saved.audioFormat) ?? .mp3,
+              section: saved.section)
     }
 
     // MARK: Quality probe
@@ -286,8 +299,17 @@ final class DownloadManager: ObservableObject {
         return (try? FileManager.default.contentsOfDirectory(atPath: safari.path)) != nil
     }
 
+    /// Which probe's answer is still wanted: a new link (or a new probe) makes the earlier one stale.
+    private var probeToken = UUID()
+
     func resetProbe() {
-        guard !isProbing else { return }
+        if isProbing {
+            // The link changed while a check was running: its answer is no longer wanted.
+            probeToken = UUID()
+            probeTimer?.invalidate()
+            probeTimer = nil
+            isProbing = false
+        }
         if statusIsProbeResult && !isRunning {
             statusLine = ""
             statusIsProbeResult = false
@@ -323,6 +345,8 @@ final class DownloadManager: ObservableObject {
         }
 
         isProbing = true
+        let token = UUID()
+        probeToken = token
         probedTitle = nil
         availableHeights = []
         approxSizeByHeight = [:]
@@ -330,12 +354,12 @@ final class DownloadManager: ObservableObject {
 
         // While a download is running its status line belongs to the download.
         let start = Date()
-        if !isRunning { statusLine = trf("Проверяю доступные качества… %d с", 0) }
+        if !isRunning { statusLine = tr("Проверяю доступные качества…") }
         probeTimer?.invalidate()
         probeTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             guard let self, !self.isRunning else { return }
             let elapsed = Int(Date().timeIntervalSince(start))
-            self.statusLine = trf("Проверяю доступные качества… %d с", elapsed)
+            self.statusLine = tr("Проверяю доступные качества…")
         }
 
         let lastGood = CookieSource.fromStorage(
@@ -347,7 +371,7 @@ final class DownloadManager: ObservableObject {
                 result = Self.runProbe(ytDlp: ytDlp, url: url, cookieArgs: lastGood.ytDlpArgs)
             }
             DispatchQueue.main.async {
-                guard let self else { return }
+                guard let self, self.probeToken == token else { return }
                 self.probeTimer?.invalidate()
                 self.probeTimer = nil
                 self.isProbing = false
@@ -358,11 +382,11 @@ final class DownloadManager: ObservableObject {
                     self.approxSizeByHeight = sizes
                     self.approxAudioBytes = duration.map { Int64($0 * 40_000) }   // 320 kbps ≈ 40 KB/s
                     if !self.isRunning {
-                        self.statusLine = trf("Доступно (%@ с): ", elapsed) + heights.map { "\($0)p" }.joined(separator: ", ")
+                        self.statusLine = tr("Доступно: ") + heights.map { "\($0)p" }.joined(separator: ", ")
                         self.statusIsProbeResult = true
                     }
                 } else if !self.isRunning {
-                    self.statusLine = trf("Не удалось определить качества за %@ с — при скачивании возьмётся максимум доступное.", elapsed)
+                    self.statusLine = tr("Не удалось определить качества — при скачивании возьмётся максимум доступное.")
                     self.needsFullDiskAccess = !Self.hasDiskAccess
                     self.statusIsProbeResult = true
                 }
@@ -598,7 +622,8 @@ final class DownloadManager: ObservableObject {
                audioOnly: Bool = false,
                stripAudio: Bool = false,
                videoFormat: VideoFormat = .current,
-               audioFormat: AudioFormat = .current) {
+               audioFormat: AudioFormat = .current,
+               section: ClipSection? = nil) {
 
         guard !isRunning else { return }
 
@@ -618,13 +643,14 @@ final class DownloadManager: ObservableObject {
         pendingStripAudio = stripAudio
         pendingVideoFormat = videoFormat
         pendingAudioFormat = audioFormat
+        pendingSection = section
         pendingSpeedLimit = effectiveSpeedLimit
         userPaused = false
         canPause = false
         let request = UnfinishedDownload(url: url, destination: destination.path, maxHeight: maxHeight,
                                          audioOnly: audioOnly, stripAudio: stripAudio,
                                          videoFormat: videoFormat.rawValue, audioFormat: audioFormat.rawValue,
-                                         name: nil)
+                                         name: nil, section: section)
         lastRequest = request
         if tracksUnfinished { request.save() }
         downloadStartTime = Date()
@@ -703,10 +729,16 @@ final class DownloadManager: ObservableObject {
             "--retry-sleep", "http:exp=1:20", "--retry-sleep", "fragment:exp=1:20",
             "--socket-timeout", "20",
         ] + SpeedLimit.ytDlpArgs(kbit: pendingSpeedLimit) + Self.jsRuntimeArgs()
+        // A part of the video only: yt-dlp cuts it (exact to the frame — the edges are re-encoded).
+        var clipTag = ""
+        if let section = pendingSection, section.length > 0 {
+            arguments += ["--download-sections", section.ytDlpValue, "--force-keyframes-at-cuts"]
+            clipTag = " (" + tr("фрагмент") + " " + section.fileTag + ")"
+        }
         if pendingAudioOnly {
             arguments += pendingAudioFormat.ytDlpArgs
             // «Название (Scorpena video downloader).mp3»
-            arguments += outputArgs("%(title)s (Scorpena video downloader).%(ext)s")
+            arguments += outputArgs("%(title)s\(clipTag) (Scorpena video downloader).%(ext)s")
         } else {
             let formatSpec: String
             let sortSpec: String
@@ -750,7 +782,7 @@ final class DownloadManager: ObservableObject {
             case .webm: arguments += ["--merge-output-format", "webm", "--recode-video", "webm"]
             }
             // «1920x1080 Название (Scorpena video downloader).mp4»
-            arguments += outputArgs("%(width&{}x|)s%(height&{} |)s%(title)s (Scorpena video downloader).%(ext)s")
+            arguments += outputArgs("%(width&{}x|)s%(height&{} |)s%(title)s\(clipTag) (Scorpena video downloader).%(ext)s")
         }
         arguments += source.ytDlpArgs
         arguments.append(pendingURL)
@@ -797,7 +829,8 @@ final class DownloadManager: ObservableObject {
                      resetLog: Bool = true) {
 
         currentJob = job
-        progress = 0
+        if case .transcode = job { progress = max(progress, 0.9) } else { progress = 0; streamIndex = -1; streamsExpected = 1; streamSizes = [] }
+        resetSpeedSmoothing()
         indeterminate = false
         statusLine = startStatus
         statusIsProbeResult = false
@@ -886,6 +919,51 @@ final class DownloadManager: ObservableObject {
         }
     }
 
+    /// Where on the one scale of the job this stream's percent lies.
+    private func overallProgress(streamPercent percent: Double) -> Double {
+        let n = max(1, streamsExpected)
+        let i = min(max(0, streamIndex), n - 1)
+        // Video first and by far the biggest; the sound after it is a small part.
+        let weights: [Double] = n == 1 ? [1] : (n == 2 ? [0.92, 0.08] : Array(repeating: 1 / Double(n), count: n))
+        let before = weights[0..<i].reduce(0, +)
+        return prepBand + (downloadBand - prepBand) * (before + weights[i] * min(max(percent / 100, 0), 1))
+    }
+
+    private static let sizeRegex = try! NSRegularExpression(pattern: #"of\s+~?\s*([\d.]+)\s*(GiB|MiB|KiB|B)\b"#)
+
+    /// «of 507.20MiB» → bytes.
+    static func parseSize(_ line: String) -> Double? {
+        let range = NSRange(line.startIndex..., in: line)
+        guard let match = sizeRegex.firstMatch(in: line, range: range),
+              let number = Range(match.range(at: 1), in: line), let unit = Range(match.range(at: 2), in: line),
+              let value = Double(line[number]) else { return nil }
+        let factor: Double = ["GiB": 1_073_741_824, "MiB": 1_048_576, "KiB": 1024, "B": 1][String(line[unit])] ?? 1
+        return value * factor
+    }
+
+    /// The whole file's size, as far as it can be told from the streams seen so far: exact when every
+    /// stream has reported, otherwise a guess from the first (the sound is a small part of a video).
+    private var estimatedTotalBytes: (bytes: Double, approximate: Bool)? {
+        let n = max(1, streamsExpected)
+        let known = streamSizes.filter { $0 > 0 }
+        guard let first = streamSizes.first, first > 0 else { return nil }
+        if known.count >= n { return (known.reduce(0, +), false) }
+        // The sound is told about only when its turn comes: until then, a guess from the video.
+        return (n == 2 ? first / 0.92 : first * Double(n), true)
+    }
+
+    private static let fragmentRegex = try! NSRegularExpression(pattern: #"\(frag (\d+)/(\d+)\)"#)
+
+    /// «(frag 2/3)» → 2/3. For a stream cut into pieces yt-dlp's own percent is only a guess
+    /// («100%» again and again while the pieces are still coming), the pieces counted are not.
+    static func fragmentFraction(in line: String) -> Double? {
+        let range = NSRange(line.startIndex..., in: line)
+        guard let match = fragmentRegex.firstMatch(in: line, range: range),
+              let a = Range(match.range(at: 1), in: line), let b = Range(match.range(at: 2), in: line),
+              let done = Double(line[a]), let total = Double(line[b]), total > 0 else { return nil }
+        return min(1, done / total)
+    }
+
     private func handle(line: String) {
         appendLog(line)
 
@@ -895,10 +973,25 @@ final class DownloadManager: ObservableObject {
 
         if case .transcode = currentJob {
             if let t = Self.parseFFmpegTime(line), let total = transcodeDuration, total > 0 {
-                progress = min(t / total, 1)
+                transcodeFraction = min(t / total, 1)
+                progress = max(progress, 0.9 + 0.1 * transcodeFraction)
             }
-            statusLine = trf("Перекодирование в H.264… %d%%", Int(progress * 100))
+            // The technical steps after the download are one plain word to the user.
+            statusLine = transcodeFraction > 0.01 ? trf("Завершаю… %d%%", Int(transcodeFraction * 100)) : tr("Завершаю…")
             return
+        }
+
+        // How many streams will come down, and which one this is.
+        if line.contains("Downloading"), line.contains("format(s):"),
+           let ids = line.components(separatedBy: "format(s):").last?.trimmingCharacters(in: .whitespaces), !ids.isEmpty {
+            streamsExpected = max(1, ids.split(separator: "+").count)
+        }
+        if line.hasPrefix("[download] Destination:") {
+            streamIndex += 1
+        } else if line.contains("has already been downloaded") {
+            // A stream finished before (a resumed download): count it as done.
+            streamIndex += 1
+            progress = max(progress, overallProgress(streamPercent: 100))
         }
 
         if line.contains("Retrying") || line.contains("Got error") {
@@ -909,20 +1002,36 @@ final class DownloadManager: ObservableObject {
         if let percent = Self.parsePercent(line) {
             canPause = true
             applySpeedLimitIfNeeded()
-            progress = min(percent / 100, 1)
+            let streamPercent = Self.fragmentFraction(in: line).map { $0 * 100 } ?? percent
+            progress = max(progress, overallProgress(streamPercent: streamPercent))
             if line.contains("(frag ") { fragmentedDownload = true }
-            var s = (pendingAudioOnly ? tr("Скачивание аудио… ") : tr("Скачивание… ")) + "\(Int(percent))%"
-            if let speed = Self.parseSpeed(line) { s += " · \(speed)" }
+            if let bytes = Self.parseSize(line), streamIndex >= 0 {
+                while streamSizes.count <= streamIndex { streamSizes.append(0) }
+                streamSizes[streamIndex] = bytes
+            }
+            var s = (pendingAudioOnly ? tr("Скачивание аудио… ") : tr("Скачивание… ")) + "\(Int(progress * 100))%"
+            // «100 МБ из ≈ 2 ГБ»: what has come down so far, of the whole file.
+            if let total = estimatedTotalBytes {
+                let finishedStreams = streamSizes.prefix(max(0, streamIndex)).reduce(0, +)
+                let current = (streamIndex >= 0 && streamIndex < streamSizes.count)
+                    ? streamSizes[streamIndex] * min(max(streamPercent / 100, 0), 1) : 0
+                let done = min(finishedStreams + current, total.bytes)
+                s += " · " + ContentView.progressAmounts(done: Int64(done), total: Int64(total.bytes), approximate: total.approximate)
+            }
+            if let speed = smoothedSpeedText(from: line) { s += " · \(speed)" }
             statusLine = s
         } else if line.contains("[ExtractAudio]") {
+            progress = max(progress, 0.9)
             canPause = false
-            statusLine = pendingAudioFormat.convertingStatus
+            statusLine = tr("Завершаю…")
         } else if line.contains("[Merger]") {
+            progress = max(progress, 0.86)
             canPause = false
-            statusLine = tr("Объединение видео и звука…")
+            statusLine = tr("Завершаю…")
         } else if line.contains("[VideoRemuxer]") || line.contains("[VideoConvertor]") || line.contains("[Recode]") {
+            progress = max(progress, 0.9)
             canPause = false
-            statusLine = trf("Упаковка в %@…", pendingVideoFormat.title)
+            statusLine = tr("Завершаю…")
         } else if line.contains("Destination:") {
             rememberFileName(from: line)
             statusLine = pendingAudioOnly ? tr("Скачивание аудио…") : tr("Скачивание…")
@@ -972,6 +1081,45 @@ final class DownloadManager: ObservableObject {
 
     static func parseETA(_ line: String) -> String? { firstGroup(line, etaRegex) }
     static func parseSpeed(_ line: String) -> String? { firstGroup(line, speedRegex) }
+
+    // The speed yt-dlp prints jumps from line to line. Showing it raw looks nervous, so it is
+    // averaged over the last few seconds, rounded, and the text changes at most twice a second.
+    private var smoothedSpeed: Double?
+    private var shownSpeedText: String?
+    private var shownSpeedAt = Date.distantPast
+
+    private func smoothedSpeedText(from line: String) -> String? {
+        guard let raw = Self.parseSpeed(line), let bytes = Self.bytesPerSecond(raw) else { return shownSpeedText }
+        smoothedSpeed = smoothedSpeed.map { $0 * 0.8 + bytes * 0.2 } ?? bytes
+        let now = Date()
+        if shownSpeedText == nil || now.timeIntervalSince(shownSpeedAt) >= 0.5, let speed = smoothedSpeed {
+            shownSpeedText = Self.speedText(speed)
+            shownSpeedAt = now
+        }
+        return shownSpeedText
+    }
+
+    private func resetSpeedSmoothing() {
+        smoothedSpeed = nil
+        shownSpeedText = nil
+        shownSpeedAt = .distantPast
+    }
+
+    /// "3.21MiB/s" → bytes per second.
+    private static func bytesPerSecond(_ text: String) -> Double? {
+        let units: [(String, Double)] = [("GiB/s", 1_073_741_824), ("MiB/s", 1_048_576), ("KiB/s", 1024), ("B/s", 1)]
+        for (unit, factor) in units where text.hasSuffix(unit) {
+            return Double(text.dropLast(unit.count).trimmingCharacters(in: .whitespaces)).map { $0 * factor }
+        }
+        return nil
+    }
+
+    /// One decimal and a space before the unit, so the text keeps its shape: «3.2 МБ/с», «850 КБ/с».
+    private static func speedText(_ bytesPerSecond: Double) -> String {
+        let mb = bytesPerSecond / 1_048_576
+        if mb >= 1 { return String(format: "%.1f ", mb) + tr("МБ/с") }
+        return String(format: "%.0f ", bytesPerSecond / 1024) + tr("КБ/с")
+    }
 
     static func parsePercent(_ line: String) -> Double? {
         let range = NSRange(line.startIndex..., in: line)
@@ -1107,7 +1255,7 @@ final class DownloadManager: ObservableObject {
         return nil
     }
 
-    private static func isAuthWall(_ l: String) -> Bool {
+    static func isAuthWall(_ l: String) -> Bool {
         // YouTube
         (l.contains("confirm you") && l.contains("bot"))
         || l.contains("login_required")
@@ -1127,7 +1275,7 @@ final class DownloadManager: ObservableObject {
         || l.contains("unable to fetch new oauth tokens")
     }
 
-    private static func authWallMessage(fdaBlocked: Bool) -> String {
+    static func authWallMessage(fdaBlocked: Bool) -> String {
         if fdaBlocked {
             return tr("""
             Это видео требует входа в аккаунт. Чтобы взять cookies из браузера, приложению нужен \
@@ -1151,17 +1299,25 @@ final class DownloadManager: ObservableObject {
         let file = deliver(stagedFile)
         progress = 1
         phase = .finished
+        let size = file.flatMap { try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize }.map { Int64($0) }
         if let start = downloadStartTime {
             statusLine = "\(status) · \(Self.formatDuration(Date().timeIntervalSince(start)))"
         } else {
             statusLine = status
         }
+        if let size { statusLine += " · " + ContentView.formatBytes(size) }
         downloadStartTime = nil
         lastDownloadedFile = file
         DiagnosticReporter.noteDownloadSuccess()
         if recordsHistory {
+            let key = QueuedDownload(url: pendingURL, destination: lastDestination ?? URL(fileURLWithPath: NSHomeDirectory()),
+                                     maxHeight: pendingMaxHeight, audioOnly: pendingAudioOnly, stripAudio: pendingStripAudio,
+                                     videoFormat: pendingVideoFormat, audioFormat: pendingAudioFormat,
+                                     section: pendingSection).settingsKey
             DownloadHistory.shared.record(url: pendingURL, audioOnly: pendingAudioOnly,
-                                          ytDlp: ytDlpPath, cookieArgs: currentCookieSource.ytDlpArgs)
+                                          ytDlp: ytDlpPath, cookieArgs: currentCookieSource.ytDlpArgs,
+                                          filePath: file?.path, settingsKey: key,
+                                          clipLength: pendingSection?.length, fileSize: size)
         }
         playChime()
     }
@@ -1192,8 +1348,8 @@ final class DownloadManager: ObservableObject {
     /// After a successful download, probe the file. If the video isn't H.264
     /// (yt-dlp fell back to VP9/AV1), transcode it — otherwise we're done.
     private func checkCodecThenFinish() {
-        progress = 1
-        statusLine = tr("Проверка кодека…")
+        progress = max(progress, 0.9)
+        statusLine = tr("Завершаю…")
 
         let file = newestDownloadedFile(extensions: ["mp4", "mkv", "webm", "mov", "m4v"])
         guard let ffmpeg = ffmpegPath, let file else {
@@ -1229,6 +1385,7 @@ final class DownloadManager: ObservableObject {
         transcodeInput = input
         transcodeOutput = output
         transcodeDuration = duration
+        transcodeFraction = 0
 
         var env = ProcessInfo.processInfo.environment
         env["PATH"] = "\((ffmpeg as NSString).deletingLastPathComponent):/usr/bin:/bin"
@@ -1246,7 +1403,7 @@ final class DownloadManager: ObservableObject {
             ],
             environment: env,
             job: .transcode,
-            startStatus: tr("Перекодирование в H.264…"),
+            startStatus: tr("Завершаю…"),
             resetLog: false)
     }
 
@@ -1426,7 +1583,7 @@ final class DownloadManager: ObservableObject {
 
     /// Turns yt-dlp's other common failures into a one-line explanation.
     /// (The "needs login" family is handled separately in `finish`.)
-    private static func friendlyDownloadError(in log: String) -> String? {
+    static func friendlyDownloadError(in log: String) -> String? {
         let l = log.lowercased()
 
         if l.contains("video unavailable") || l.contains("this video is not available") {
@@ -1444,7 +1601,7 @@ final class DownloadManager: ObservableObject {
         if l.contains("unable to resolve host") || l.contains("could not resolve host") || l.contains("could not contact dns")
             || l.contains("network is unreachable") || l.contains("connection refused")
             || l.contains("nodename nor servname") || l.contains("internet connection appears to be offline") {
-            return tr("Нет соединения с интернетом. Если включён VPN, попробуй его выключить.")
+            return tr("Не получилось связаться с сайтом. Если включён VPN, попробуй его выключить.")
         }
         return nil
     }
