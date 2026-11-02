@@ -164,3 +164,17 @@ final wording themselves as often as not; paste their edits back into the
   `hdiutil info` for the `image-path` to avoid detaching a DMG the *user*
   has open themselves (they do sometimes inspect the built DMG in Finder
   while you're mid-session).
+
+## Unreleased work after 3.1.1 (local commit 3f060fb, not pushed)
+
+Details in the memory note `project_scorpena_unreleased_state`. In short: clip window (`Trim.swift`),
+one progress bar for the whole job (`BarDriver`/`SmoothBar` in `Style.swift`), reworked queue/history
+window, «Файл уже скачан», one hand-drawn toolbar icon set (`ToolbarIcon`), `FileReveal.show` as the
+single «show the file» rule («Файл не найден» when it is gone).
+
+**Before any release build:** remove every `DEV-TEST-HOOK` block (env vars `SCORPENA_TRIM_*`,
+`SCORPENA_OPEN_DOWNLOADS`, `SCORPENA_AUTODL`, `SCORPENA_PROGRESS_LOG`); get the new texts approved.
+
+**Testing rule:** a test build shares `~/Library/Application Support/VideoDownloader` (queue, history,
+partial files) with the user's real app and the user may be using it — never kill it without saying
+so, build into a new folder, and remove test entries from `history.json` afterwards.
