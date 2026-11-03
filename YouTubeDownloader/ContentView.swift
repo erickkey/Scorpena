@@ -503,7 +503,7 @@ struct ContentView: View {
 
     /// Lines starting with «## » are section headings (Новое / Улучшения / Исправлено), the rest are bullets.
     static let changelog: [String: [String]] = [
-        "3.3": [
+        "3.2.1": [
             "## Новое",
             "Ножницы: вырезание нужного куска видео, ввод времени вручную, навигация клавишами",
             "## Исправлено",
