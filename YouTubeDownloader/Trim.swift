@@ -42,17 +42,25 @@ final class TrimPanel {
         win.centerExactlyOnScreen()
         win.makeKeyAndOrderFront(nil)
         window = win
-        // Space plays and pauses; the arrows go a second back or forward (half a second with Shift) —
-        // unless a time is being typed in.
+        // Keys, as on YouTube, while a time is not being typed in:
+        //  Space — play, pause;  ← / → — 5 s back / forward (Shift: 1 s);  , / . — one frame;
+        //  0–9 — jump to that tenth of the video.
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak win] event in
             guard let self, let win, event.window === win, let model = self.model, model.previewReady,
-                  !(win.firstResponder is NSTextView) else { return event }
-            let step = event.modifierFlags.contains(.shift) ? 0.5 : 1.0
+                  !(win.firstResponder is NSTextView),
+                  !event.modifierFlags.contains(.command), !event.modifierFlags.contains(.control) else { return event }
+            let shift = event.modifierFlags.contains(.shift)
+            // The key codes do not depend on the keyboard layout.
+            let digits: [UInt16: Int] = [29: 0, 18: 1, 19: 2, 20: 3, 21: 4, 23: 5, 22: 6, 26: 7, 28: 8, 25: 9]
             switch event.keyCode {
-            case 49:  model.togglePlay()
-            case 123: model.nudge(by: -step)
-            case 124: model.nudge(by: step)
-            default:  return event
+            case 49: model.togglePlay()                                   // Space
+            case 123: model.nudge(by: shift ? -1 : -5)                    // ←
+            case 124: model.nudge(by: shift ? 1 : 5)                      // →
+            case 43: model.stepFrame(-1)                                  // ,
+            case 47: model.stepFrame(1)                                   // .
+            default:
+                guard let tenth = digits[event.keyCode] else { return event }
+                model.jump(toTenth: tenth)
             }
             return nil
         }
@@ -473,11 +481,27 @@ final class TrimModel: ObservableObject {
         else { end = total > 0 ? min(max(0, value), total) : max(0, value); endText = ClipSection.clock(end) }
     }
 
-    /// The arrow keys: a step back or forward in the video.
+    /// A step back or forward in the video.
     func nudge(by seconds: Double) {
         guard phase == .ready else { return }
         seek(to: current + seconds)
     }
+
+    /// «,» and «.» (as on YouTube): one frame back or forward, with the video paused.
+    func stepFrame(_ direction: Int) {
+        guard phase == .ready, let item = player?.currentItem else { return }
+        player?.pause()
+        clipEnd = nil
+        item.step(byCount: direction)
+        current = min(max(0, item.currentTime().seconds), duration)
+    }
+
+    /// Keys 0–9: jump to that tenth of the video.
+    func jump(toTenth tenth: Int) {
+        guard phase == .ready else { return }
+        seek(to: duration * Double(tenth) / 10)
+    }
+
 
     // MARK: Downloading the part
 

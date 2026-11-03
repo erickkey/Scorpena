@@ -123,9 +123,7 @@ func trf(_ russianFormat: String, _ args: CVarArg...) -> String {
 
 enum Translations {
     static let en: [String: String] = [
-        "Ножницы: время начала и конца можно ввести сразу, не дожидаясь предпросмотра": "Scissors: the start and end times can be typed in at once, without waiting for the preview",
-        "Ножницы: пробел включает паузу, стрелки перематывают на секунду (с Shift на полсекунды)": "Scissors: Space plays and pauses, the arrow keys step one second (half a second with Shift)",
-        "Сведения о ссылке и предпросмотр запоминаются на сутки": "What is known about a link and its preview are remembered for a day",
+        "Ножницы: вырезание нужного куска видео, ввод времени вручную, навигация клавишами": "Scissors: cutting out the part of a video you need, typing the times in by hand, keyboard navigation",
         "Светлая и тёмная тема": "Light and dark theme",
         "Выбери язык": "Choose your language",
         "Свернуть все": "Collapse all",
@@ -316,7 +314,6 @@ enum Translations {
         "Новое": "New",
         "Улучшения": "Improvements",
         "Исправлено": "Fixed",
-        "Ножницы: можно вырезать из видео нужный кусок и скачать только его": "Scissors: cut the part you need out of a video and download only that",
         "Галочка «Открывать папку после загрузки»": "The “Open the folder after the download” checkbox",
         "Ссылки на видео можно вставлять прямо в окне очереди, как на главной": "Video links can be pasted right in the queue window, as on the main one",
         "В истории видно, сколько длится видео и когда его скачали, записи можно удалять": "History shows how long a video is and when it was downloaded; entries can be removed",
