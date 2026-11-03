@@ -45,6 +45,9 @@ let total = { queue.items.count + queue.running.count }
 check(total() == 3, "three clips of one video are all taken (got \(total()))")
 queue.submit(item(ClipSection(start: 6, end: 9)))
 check(total() == 3, "the same clip twice is refused (got \(total()))")
+check(queue.badgeLabel == "3", "the number on the Dock icon is the number of downloads going and waiting (got \(queue.badgeLabel ?? "nothing"))")
+queue.cancelAll()
+check(queue.badgeLabel == (queue.running.isEmpty ? nil : String(queue.running.count)), "once the waiting ones are cancelled only the running ones are counted")
 
 // --- a normal download: lines in, status and bar out
 let m = DownloadManager()

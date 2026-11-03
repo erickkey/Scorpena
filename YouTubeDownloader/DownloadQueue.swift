@@ -90,6 +90,11 @@ final class DownloadQueue: ObservableObject {
     private weak var primary: DownloadManager?
     private var watchers: [AnyCancellable] = []
 
+    /// The red number on the program's icon in the Dock: how many downloads are going or waiting (nothing when none).
+    var pendingCount: Int { items.count + running.count }
+
+    var badgeLabel: String? { pendingCount > 0 ? String(pendingCount) : nil }
+
     var managers: [DownloadManager] { (primary.map { [$0] } ?? []) + extras }
     var busyCount: Int { managers.filter { $0.isRunning || $0.isPaused }.count }
 

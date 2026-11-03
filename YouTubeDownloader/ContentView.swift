@@ -166,7 +166,7 @@ struct ContentView: View {
                 } label: {
                     ToolbarIcon(name: "queue")
                         .overlay(alignment: .topTrailing) {
-                            let count = queue.items.count + queue.busyCount
+                            let count = queue.pendingCount
                             if count > 0 {
                                 Text("\(count)")
                                     .font(.system(size: 9, weight: .bold))
@@ -258,6 +258,8 @@ struct ContentView: View {
             updateDockProgress()
             runStartTime = running ? Date() : nil
         }
+        .onChange(of: queue.items.count) { _ in updateDockProgress() }
+        .onChange(of: queue.running.count) { _ in updateDockProgress() }
         .onChange(of: queue.batchActive) { active in
             batchStartTime = active ? (batchStartTime ?? Date()) : nil
         }
@@ -382,6 +384,7 @@ struct ContentView: View {
         } else {
             NSApp.dockTile.contentView = nil
         }
+        NSApp.dockTile.badgeLabel = queue.badgeLabel
         NSApp.dockTile.display()
     }
 
@@ -500,6 +503,12 @@ struct ContentView: View {
 
     /// Lines starting with «## » are section headings (Новое / Улучшения / Исправлено), the rest are bullets.
     static let changelog: [String: [String]] = [
+        "3.3": [
+            "## Новое",
+            "Ножницы: вырезание нужного куска видео, ввод времени вручную, навигация клавишами",
+            "## Исправлено",
+            "Общие улучшения стабильности",
+        ],
         "3.2": [
             "## Новое",
             "Ножницы: вырезание нужного куска видео, ввод времени вручную, навигация клавишами",
