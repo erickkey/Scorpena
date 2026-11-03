@@ -1,65 +1,67 @@
 # Scorpena – video downloader
 
-Программа для Mac: вставляешь ссылку на видео, и она скачивает его в один клик. Работает с YouTube, VK, Instagram, TikTok, Vimeo и ещё с более чем 1000 сайтов. Бесплатная.
+[**English**](README.md) · [Русский](README.ru.md)
 
-**Скачать:** [Scorpena.dmg](https://github.com/erickkey/Scorpena/releases/latest/download/Scorpena.dmg)
+A Mac program: paste a link to a video and it downloads it in one click. Works with YouTube, VK, Instagram, TikTok, Vimeo and more than 1000 other sites. Free.
 
-## Как пользоваться
+**Download:** [Scorpena.dmg](https://github.com/erickkey/Scorpena/releases/latest/download/Scorpena.dmg)
 
-1. Открой DMG и перетащи Scorpena в «Программы».
-2. Вставь ссылку на видео.
-3. Выбери формат: видео (MP4, MOV, WebM, MKV) или звук (MP3, WAV, M4A).
-4. Нажми «Скачать».
+## How to use
 
-## Возможности
+1. Open the DMG and drag Scorpena to «Applications».
+2. Paste a link to a video.
+3. Choose a format: video (MP4, MOV, WebM, MKV) or audio (MP3, WAV, M4A).
+4. Click «Download».
 
-- **Загрузка:** видео (MP4, MOV, WebM, MKV) и звук (MP3, WAV, M4A)
-- **Качество и размер:** перед скачиванием видно, какое качество есть и сколько будет весить файл
-- **Фрагменты:** можно скачать не всё видео, а только нужный кусок
-- **Очередь:** до 3 видео скачиваются одновременно, остальные запускаются автоматически по мере завершения предыдущих
-- **Плейлисты:** скачивание плейлистов
-- **История:** список скачанного, откуда файл открывается в один клик
-- **Докачка:** если закрыть программу или пропал интернет, скачивание продолжится
-- **Скорость:** ограничение скорости скачивания
-- **Ссылка:** скопированная ссылка вставляется в поле сама
-- **Оформление:** светлая и тёмная тема, пять языков
-- **Обновление:** новая версия ставится одной кнопкой
-- **Совместимость:** любой Mac (Intel и Apple Silicon), macOS 13 и новее
+## Features
 
-## Ограничения
+- **Downloading:** video (MP4, MOV, WebM, MKV) and audio (MP3, WAV, M4A)
+- **Quality and size:** before downloading you can see which qualities are available and how big the file will be
+- **Clips:** downloading only the chosen part of a video instead of the whole one
+- **Queue:** up to 3 videos download at the same time, the others start automatically as the previous ones finish
+- **Playlists:** downloading playlists
+- **History:** a list of downloaded files, each opens in one click
+- **Resume:** if the program is closed or the internet drops, the download continues
+- **Speed:** a limit for the download speed
+- **Link:** a copied link is pasted into the field automatically
+- **Appearance:** light and dark theme, five languages
+- **Updates:** a new version installs with one button
+- **Compatibility:** any Mac (Intel and Apple Silicon), macOS 13 and newer
 
-- **Защищённый контент:** Netflix, Disney+, Prime Video, Apple TV+, Кинопоиск, ivi, Okko и другие сервисы с DRM скачать нельзя: они шифруют видео от копирования
-- **Прямые трансляции:** можно записать только уже закончившиеся эфиры
+## Limitations
 
-## Первый запуск
+- **Protected content:** Netflix, Disney+, Prime Video, Apple TV+, Kinopoisk, ivi, Okko and other DRM services cannot be downloaded: they encrypt the video against copying
+- **Live streams:** only broadcasts that have already ended can be recorded
 
-Программа без подписи Apple, поэтому при первом запуске Mac может ругаться:
+## First launch
 
-- Нажми на программу правой кнопкой → «Открыть» → «Открыть».
-- Если пишет «повреждено», открой Терминал и вставь эту команду:
+The program is not signed by Apple, so on the first launch the Mac may complain:
+
+- Right-click the program → «Open» → «Open».
+- If it says «damaged», open Terminal and paste this command:
 
   ```
   xattr -cr /Applications/Scorpena.app
   ```
 
-  (она снимает с программы метку «скачано из интернета», из-за которой Mac считает её подозрительной)
+  (it removes the «downloaded from the internet» mark from the program, which makes the Mac think it is suspicious)
 
-- Если и это не помогло: «Системные настройки» → «Конфиденциальность и безопасность» → «Открыть в любом случае».
+- If that did not help: «System Settings» → «Privacy & Security» → «Open Anyway».
 
-При дальнейших обновлениях этого делать не придётся. Отправляй DMG через AirDrop или ссылкой, не через Telegram и WhatsApp: они портят файл.
+This is not needed for later updates. Send the DMG via AirDrop or as a link, not through Telegram or WhatsApp: they corrupt the file.
 
-## Если видео просит войти
+## If a video asks to sign in
 
-Некоторые сайты просят войти в аккаунт. Программа сама берёт куки из твоего браузера. Для Safari ей нужен «Полный доступ к диску», она сама подскажет, как его включить.
+Some sites ask to sign in to an account. The program takes the cookies from your browser by itself. For Safari it needs «Full Disk Access», and it tells how to turn it on.
 
-## Приватность
+## Privacy
 
-Ничего личного программа не собирает. Сообщения об ошибках и отзывы уходят разработчику только когда ты сам нажмёшь «Отправить». Анонимные отчёты о сбоях можно отключить в «Дополнительно».
+The program collects nothing personal. Error reports and feedback go to the developer only when you click «Send». Anonymous crash reports can be turned off in «Advanced».
 
-## Поддержать
+## Support
 
-Если программа пригодилась, можно [поддержать её развитие](https://tips.tips/000490838).
+If the program was useful, you can [support its development](https://tips.tips/000490838).
 
-Для разработчиков: [DEVELOPMENT.md](DEVELOPMENT.md).
+For developers: [DEVELOPMENT.md](DEVELOPMENT.md).
 
-Скачивай только то, на что у тебя есть право.
+Download only what you have the right to.
