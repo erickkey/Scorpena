@@ -123,6 +123,9 @@ func trf(_ russianFormat: String, _ args: CVarArg...) -> String {
 
 enum Translations {
     static let en: [String: String] = [
+        "Ножницы: время начала и конца можно ввести сразу, не дожидаясь предпросмотра": "Scissors: the start and end times can be typed in at once, without waiting for the preview",
+        "Ножницы: пробел включает паузу, стрелки перематывают на секунду (с Shift на полсекунды)": "Scissors: Space plays and pauses, the arrow keys step one second (half a second with Shift)",
+        "Сведения о ссылке и предпросмотр запоминаются на сутки": "What is known about a link and its preview are remembered for a day",
         "Светлая и тёмная тема": "Light and dark theme",
         "Выбери язык": "Choose your language",
         "Свернуть все": "Collapse all",
