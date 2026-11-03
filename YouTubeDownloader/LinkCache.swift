@@ -2,7 +2,7 @@ import Foundation
 import CryptoKit
 
 /// What was found out about a link a short while ago (its title, qualities, sizes and length), kept for
-/// half a day in a small file — like the history. Pasting the same link again in any window does not
+/// a day in a small file — like the history. Pasting the same link again in any window does not
 /// ask the site again.
 enum ProbeCache {
     struct Entry: Codable {
@@ -13,7 +13,7 @@ enum ProbeCache {
         var date: Date
     }
 
-    static let lifetime: TimeInterval = 12 * 3600
+    static let lifetime: TimeInterval = 24 * 3600
     static let limit = 100
 
     private static let file: URL = {

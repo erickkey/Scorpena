@@ -110,9 +110,13 @@ final class TrimModel: ObservableObject {
 
     init(manager: DownloadManager) {
         self.manager = manager
+        // A fresh link is looked at after a short pause; while a video is on the screen, the pause is
+        // 3 seconds, so correcting a typo does not make anything happen halfway through.
         LinkField.clip.$text
             .removeDuplicates()
-            .debounce(for: .milliseconds(1500), scheduler: DispatchQueue.main)
+            .map { [weak self] _ in (self?.previewReady ?? false) ? 3.0 : 0.7 }
+            .map { delay in Just(()).delay(for: .seconds(delay), scheduler: DispatchQueue.main) }
+            .switchToLatest()
             .sink { [weak self] _ in self?.linkChanged() }
             .store(in: &cancellables)
     }
