@@ -4,6 +4,7 @@ import Foundation
 // Texts missing here fall back to English (then Russian) — see `tr`.
 extension Translations {
     static let zh: [String: String] = [
+        "Программа для Mac: скачивание видео и звука с YouTube, VK, Instagram, TikTok, Vimeo и ещё около 1750 сайтов, а также вырезание фрагментов, очередь, плейлисты, история и другие инструменты для загрузок.": "Mac 程序：可从 YouTube、VK、Instagram、TikTok、Vimeo 以及约 1750 个其他网站下载视频和音频，另有片段剪切、队列、播放列表、历史记录等下载工具。",
         "пауза и воспроизведение": "暂停和播放",
         "перемотка на 5 секунд": "快进快退 5 秒",
         "точная перемотка на 1 секунду": "精确跳转 1 秒",
@@ -178,7 +179,6 @@ extension Translations {
         "Не докачано: %@. Продолжить с того места, где остановилось?": "未下完：%@。要从中断的地方继续吗？",
         "Не нужно": "不用了",
         "Готово ✅ (%@)": "完成 ✅（%@）",
-        "Нативное приложение для Mac. Скачивает видео и аудио с YouTube, VK, Instagram, TikTok, Vimeo и ещё ~1750 сайтов одним кликом. Видео в MP4, MOV, WebM или MKV, звук в MP3, WAV или M4A: формат выбирается рядом с кнопками скачивания.": "Mac 原生应用。一键从 YouTube、VK、Instagram、TikTok、Vimeo 以及约 1750 个其他网站下载视频和音频。视频格式为 MP4、MOV、WebM 或 MKV，音频格式为 MP3、WAV 或 M4A：格式在下载按钮旁选择。",
         "Благодарю": "谢谢",
         "Вопросы, предложения, ошибки: что угодно. Уходит прямо разработчику.": "问题、建议、错误：什么都可以写。会直接发给开发者。",
         "Обращение": "留言",
@@ -314,6 +314,7 @@ extension Translations {
     ]
 
     static let hi: [String: String] = [
+        "Программа для Mac: скачивание видео и звука с YouTube, VK, Instagram, TikTok, Vimeo и ещё около 1750 сайтов, а также вырезание фрагментов, очередь, плейлисты, история и другие инструменты для загрузок.": "Mac के लिए प्रोग्राम: YouTube, VK, Instagram, TikTok, Vimeo और लगभग 1750 अन्य साइटों से वीडियो और ऑडियो डाउनलोड करना, साथ ही क्लिप काटना, कतार, प्लेलिस्ट, इतिहास और डाउनलोड के लिए दूसरे उपकरण।",
         "пауза и воспроизведение": "रोकना और चलाना",
         "перемотка на 5 секунд": "5 सेकंड आगे-पीछे",
         "точная перемотка на 1 секунду": "1 सेकंड की सटीक छलांग",
@@ -488,7 +489,6 @@ extension Translations {
         "Не докачано: %@. Продолжить с того места, где остановилось?": "अधूरा है: %@। जहाँ रुका था वहीं से जारी रखें?",
         "Не нужно": "नहीं, धन्यवाद",
         "Готово ✅ (%@)": "हो गया ✅ (%@)",
-        "Нативное приложение для Mac. Скачивает видео и аудио с YouTube, VK, Instagram, TikTok, Vimeo и ещё ~1750 сайтов одним кликом. Видео в MP4, MOV, WebM или MKV, звук в MP3, WAV или M4A: формат выбирается рядом с кнопками скачивания.": "Mac के लिए नेटिव ऐप। YouTube, VK, Instagram, TikTok, Vimeo और लगभग 1750 अन्य साइटों से एक क्लिक में वीडियो और ऑडियो डाउनलोड करता है। वीडियो MP4, MOV, WebM या MKV में, ऑडियो MP3, WAV या M4A में: फ़ॉर्मैट डाउनलोड बटनों के पास चुना जाता है।",
         "Благодарю": "धन्यवाद",
         "Вопросы, предложения, ошибки: что угодно. Уходит прямо разработчику.": "सवाल, सुझाव, गड़बड़ियाँ: कुछ भी लिखें। सीधे डेवलपर तक पहुँचता है।",
         "Обращение": "संदेश",
@@ -624,6 +624,7 @@ extension Translations {
     ]
 
     static let es: [String: String] = [
+        "Программа для Mac: скачивание видео и звука с YouTube, VK, Instagram, TikTok, Vimeo и ещё около 1750 сайтов, а также вырезание фрагментов, очередь, плейлисты, история и другие инструменты для загрузок.": "Programa para Mac: descarga de vídeo y audio de YouTube, VK, Instagram, TikTok, Vimeo y unos 1750 sitios más, además de recorte de fragmentos, cola, listas de reproducción, historial y otras herramientas para las descargas.",
         "пауза и воспроизведение": "pausa y reproducción",
         "перемотка на 5 секунд": "saltar 5 segundos",
         "точная перемотка на 1 секунду": "salto preciso de 1 segundo",
@@ -798,7 +799,6 @@ extension Translations {
         "Не докачано: %@. Продолжить с того места, где остановилось?": "Sin terminar: %@. ¿Continuar desde donde se detuvo?",
         "Не нужно": "No, gracias",
         "Готово ✅ (%@)": "Listo ✅ (%@)",
-        "Нативное приложение для Mac. Скачивает видео и аудио с YouTube, VK, Instagram, TikTok, Vimeo и ещё ~1750 сайтов одним кликом. Видео в MP4, MOV, WebM или MKV, звук в MP3, WAV или M4A: формат выбирается рядом с кнопками скачивания.": "Aplicación nativa para Mac. Descarga vídeo y audio de YouTube, VK, Instagram, TikTok, Vimeo y unos 1750 sitios más con un solo clic. El vídeo en MP4, MOV, WebM o MKV y el audio en MP3, WAV o M4A: el formato se elige junto a los botones de descarga.",
         "Благодарю": "Gracias",
         "Вопросы, предложения, ошибки: что угодно. Уходит прямо разработчику.": "Preguntas, sugerencias, errores: lo que quieras. Va directo al desarrollador.",
         "Обращение": "Mensaje",

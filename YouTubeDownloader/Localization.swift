@@ -123,6 +123,7 @@ func trf(_ russianFormat: String, _ args: CVarArg...) -> String {
 
 enum Translations {
     static let en: [String: String] = [
+        "Программа для Mac: скачивание видео и звука с YouTube, VK, Instagram, TikTok, Vimeo и ещё около 1750 сайтов, а также вырезание фрагментов, очередь, плейлисты, история и другие инструменты для загрузок.": "A program for Mac: downloading video and audio from YouTube, VK, Instagram, TikTok, Vimeo and about 1750 other sites, as well as cutting out clips, a queue, playlists, history and other tools for downloads.",
         "пауза и воспроизведение": "pause and play",
         "перемотка на 5 секунд": "skip 5 seconds",
         "точная перемотка на 1 секунду": "precise skip of 1 second",
@@ -371,8 +372,6 @@ enum Translations {
 
         // MARK: About window
         "Скопируй ссылку и нажми «Скачать»": "Copy the link and hit “Download”",
-        "Нативное приложение для Mac. Скачивает видео и аудио с YouTube, VK, Instagram, TikTok, Vimeo и ещё ~1750 сайтов одним кликом. Видео в MP4, MOV, WebM или MKV, звук в MP3, WAV или M4A: формат выбирается рядом с кнопками скачивания.":
-            "A native Mac app. Downloads video and audio from YouTube, VK, Instagram, TikTok, Vimeo and ~1750 more sites in one click. Video as MP4, MOV, WebM or MKV, audio as MP3, WAV or M4A: the format is chosen next to the download buttons.",
         "Размер файла и доступное качество видны до скачивания.": "File size and available quality are shown before downloading.",
         "Ссылка из буфера обмена подставляется сама.": "A link from the clipboard is filled in automatically.",
         "Отчёт об ошибке разработчику в один клик.": "Error report to the developer in one click.",
