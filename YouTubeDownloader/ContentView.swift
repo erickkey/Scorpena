@@ -1936,14 +1936,6 @@ struct AboutView: View {
     var body: some View {
         InfoScaffold(width: 480, height: 600, closeTitle: tr("Благодарю"), onClose: onClose) {
             VStack(alignment: .leading, spacing: 14) {
-                TextWithGear(text: tr("Сайты периодически меняют защиту. Если видео перестало скачиваться, зайди в раздел «Дополнительно» (⚙) и проверь обновления встроенных инструментов."),
-                             action: { AdvancedSettingsPanel.shared.show() })
-                    .font(.callout)
-                    .padding(14)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(Color.accentColor.opacity(0.12)))
-                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.accentColor.opacity(0.35)))
-
                 HStack(alignment: .center, spacing: 10) {
                     Image(nsImage: NSApp.applicationIconImage)
                         .resizable()
