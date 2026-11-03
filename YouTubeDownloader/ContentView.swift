@@ -181,6 +181,7 @@ struct ContentView: View {
                         }
                 }
                 .help(tr("Очередь загрузок"))
+                .buttonStyle(.plain)   // the icons keep one colour: no system highlight on hover
                 // History is its own button: the same window, opened on its own tab.
                 Button {
                     DownloadsPanel.shared.show(manager: manager, tab: .history) { picked in urlString = picked }
@@ -188,6 +189,7 @@ struct ContentView: View {
                     ToolbarIcon(name: "history")
                 }
                 .help(tr("История скачиваний"))
+                .buttonStyle(.plain)   // the icons keep one colour: no system highlight on hover
                 Button {
                     LinkField.shared.text = urlString
                     TrimPanel.shared.show(manager: manager)
@@ -195,12 +197,14 @@ struct ContentView: View {
                     ToolbarIcon(name: "scissors")
                 }
                 .help(tr("Вырезать фрагмент"))
+                .buttonStyle(.plain)   // the icons keep one colour: no system highlight on hover
                 Button {
                     AdvancedSettingsPanel.shared.show(manager: manager)
                 } label: {
                     ToolbarIcon(name: "settings")
                 }
                 .help(tr("Дополнительно"))
+                .buttonStyle(.plain)   // the icons keep one colour: no system highlight on hover
                 // Sun or moon, whichever you would switch to. Until the first press the app simply
                 // follows the system's theme (the icon follows it too).
                 Button {
@@ -209,6 +213,7 @@ struct ContentView: View {
                     ToolbarIcon(name: colorScheme == .dark ? "sun" : "moon")
                 }
                 .help(tr("Светлая / тёмная тема"))
+                .buttonStyle(.plain)   // the icons keep one colour: no system highlight on hover
             }
         }
         .background(WindowAccessor { windowFitter.window = $0 })

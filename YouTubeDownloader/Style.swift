@@ -476,6 +476,8 @@ struct ToolbarIcon: View {
             context.stroke(path, with: .foreground, style: style)
         }
         .frame(width: 20, height: 20)
+        .foregroundStyle(Color.primary.opacity(0.62))
+        .contentShape(Rectangle())
     }
 }
 
