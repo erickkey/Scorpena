@@ -331,7 +331,6 @@ final class DownloadManager: ObservableObject {
             approxSizeByHeight = [:]
             approxAudioBytes = nil
             probedDuration = nil
-        probedDuration = nil
         }
     }
 
@@ -354,6 +353,16 @@ final class DownloadManager: ObservableObject {
 
         if ToolLocator.isBundled(ytDlp), let dir = ToolLocator.bundledBinDirectory {
             Self.clearQuarantine(dir)
+        }
+
+        // Asked about a short while ago: the answer is already known.
+        if let known = ProbeCache.lookup(url) {
+            probedTitle = known.title
+            availableHeights = known.heights
+            approxSizeByHeight = Dictionary(uniqueKeysWithValues: known.sizes.compactMap { pair in Int(pair.key).map { ($0, pair.value) } })
+            approxAudioBytes = known.duration.map { Int64($0 * 40_000) }
+            probedDuration = known.duration
+            return
         }
 
         isProbing = true
@@ -390,6 +399,7 @@ final class DownloadManager: ObservableObject {
                     self.approxSizeByHeight = sizes
                     self.approxAudioBytes = duration.map { Int64($0 * 40_000) }   // 320 kbps ≈ 40 KB/s
                     self.probedDuration = duration
+                    ProbeCache.store(url, title: title, heights: heights, sizes: sizes, duration: duration)
                 } else if !self.isRunning {
                     self.needsFullDiskAccess = outcome.sawAuthWall && !Self.hasDiskAccess
                 }

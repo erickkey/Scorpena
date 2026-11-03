@@ -7,10 +7,11 @@ import Combine
 // «Вырезать фрагмент»: a window where the video can be watched (with sound) and the
 // beginning and the end of the wanted part are marked, then only that part is downloaded.
 
-/// The link field is one: what is typed or pasted in the main window shows up in the
-/// clip window, and the other way round.
+/// The link field of the clip window.
 final class LinkField: ObservableObject {
-    static let shared = LinkField()
+    /// The clip window's own field. It keeps what was in it until the program is closed — nothing is
+    /// copied into it from the other windows (that used to start preparing a preview by itself).
+    static let clip = LinkField()
     @Published var text = ""
 }
 
@@ -95,6 +96,10 @@ final class TrimModel: ObservableObject {
     @Published var startText = "0:00"
     @Published var endText = "0:00"
     @Published private(set) var queuedNote: String?
+    /// A new link is being prepared while the old video stays on the screen (so a corrected typo does
+    /// not make the preview vanish); the percent of that preparation, when known.
+    @Published private(set) var refreshing = false
+    @Published private(set) var refreshPercent: Double?
 
     private var job: LoadJob?
     private var tempDir: URL?
@@ -105,14 +110,14 @@ final class TrimModel: ObservableObject {
 
     init(manager: DownloadManager) {
         self.manager = manager
-        LinkField.shared.$text
+        LinkField.clip.$text
             .removeDuplicates()
-            .debounce(for: .milliseconds(700), scheduler: DispatchQueue.main)
+            .debounce(for: .milliseconds(1500), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in self?.linkChanged() }
             .store(in: &cancellables)
     }
 
-    var link: String { LinkField.shared.text.trimmingCharacters(in: .whitespacesAndNewlines) }
+    var link: String { LinkField.clip.text.trimmingCharacters(in: .whitespacesAndNewlines) }
     var linkIsUsable: Bool { ContentView.isPlausibleURLString(link) }
     var section: ClipSection { ClipSection(start: start, end: end) }
     /// The length of the video: from the viewing copy when it is ready, from the quality check before that
@@ -147,6 +152,7 @@ final class TrimModel: ObservableObject {
         title = nil
         duration = 0; start = 0; end = 0; current = 0
         typedByUser = false
+        refreshing = false
         startText = "0:00"; endText = "0:00"
         phase = .empty
     }
@@ -155,23 +161,39 @@ final class TrimModel: ObservableObject {
     /// instantly whatever the site, and the real download still uses the chosen quality.
     func load() {
         guard linkIsUsable else { return }
+        let url = link
+        // A video is on the screen already: it stays (dimmed, with «Готовлю просмотр…») until the new one is ready.
+        let hadPreview = phase == .ready && player != nil
+        if hadPreview {
+            job?.cancelled = true
+            job?.process?.terminate()
+            job = nil
+            removeTemp()
+        } else {
+            reset()
+        }
+        loadedLink = url
+        manager.resetProbe()
+        manager.probeQuality(urlString: url)     // the sizes shown next to the clip length come from here
+        // Prepared a short while ago: shown at once.
+        if let hit = PreviewCache.lookup(url) {
+            title = hit.title
+            show(file: hit.file)
+            return
+        }
         guard let ytDlp = manager.ytDlpPath, let ffmpeg = manager.ffmpegPath else {
+            refreshing = false
             phase = .failed(tr("Внутри программы не хватает файлов. Скачай Scorpena заново."), diskAccess: false)
             return
         }
-        reset()
-        let url = link
-        loadedLink = url
         let job = LoadJob()
         self.job = job
-        phase = .preparing(nil)
+        if hadPreview { refreshing = true; refreshPercent = nil } else { phase = .preparing(nil) }
 
         let dir = DownloadManager.partialDir.appendingPathComponent("preview-" + UUID().uuidString, isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         tempDir = dir
         let ffmpegDir = (ffmpeg as NSString).deletingLastPathComponent
-        manager.resetProbe()
-        manager.probeQuality(urlString: url)     // the sizes shown next to the clip length come from here
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             var log = ""
@@ -182,7 +204,10 @@ final class TrimModel: ObservableObject {
                 if job.cancelled { return }
                 let result = Self.downloadViewingCopy(job: job, ytDlp: ytDlp, ffmpegDir: ffmpegDir, url: url, dir: dir,
                                                       cookieArgs: cookieArgs) { percent in
-                    DispatchQueue.main.async { if self?.job === job, !job.cancelled { self?.phase = .preparing(percent) } }
+                    DispatchQueue.main.async {
+                        guard let self, self.job === job, !job.cancelled else { return }
+                        if self.refreshing { self.refreshPercent = percent } else { self.phase = .preparing(percent) }
+                    }
                 }
                 log += result.log
                 if let file = result.file { found = file; foundTitle = result.title; break }
@@ -198,12 +223,17 @@ final class TrimModel: ObservableObject {
             if let file = found {
                 playable = Self.makePlayable(file: file, ffmpeg: ffmpeg)
             }
+            // Kept for a day, so the same link does not have to be prepared again.
+            let stored = playable.flatMap { PreviewCache.store(file: $0, link: url, title: foundTitle) }
             DispatchQueue.main.async {
                 guard let self, self.job === job, !job.cancelled else { return }
                 if let playable {
                     self.title = foundTitle
-                    self.show(file: playable)
+                    self.show(file: stored ?? playable)
+                    if stored != nil { self.removeTemp() }
                 } else {
+                    self.refreshing = false
+                    if hadPreview { self.removePlayer() }
                     let message = sawAuth
                         ? DownloadManager.authWallMessage(fdaBlocked: !DownloadManager.hasDiskAccess)
                         : (DownloadManager.friendlyDownloadError(in: log)
@@ -289,6 +319,7 @@ final class TrimModel: ObservableObject {
     }
 
     private func show(file: URL) {
+        refreshing = false
         let item = AVPlayerItem(url: file)
         let player = AVPlayer(playerItem: item)
         let seconds = item.asset.duration.seconds
@@ -497,7 +528,7 @@ struct TrimView: View {
     @ObservedObject var model: TrimModel
     var onClose: () -> Void
 
-    @ObservedObject private var link = LinkField.shared
+    @ObservedObject private var link = LinkField.clip
     @ObservedObject private var manager: DownloadManager
     @ObservedObject private var languageSettings = LanguageSettings.shared
     @AppStorage("qualityHeight") private var qualityHeight = 0
@@ -617,13 +648,24 @@ struct TrimView: View {
                 .padding(20)
             case .ready:
                 PlayerSurface(player: model.player)
+                    .opacity(model.refreshing ? 0.35 : 1)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                 // The system player view swallows clicks, so a clear layer on top catches them:
                 // a click plays or pauses.
                 Color.clear
                     .contentShape(Rectangle())
                     .onTapGesture { model.togglePlay() }
-                if !model.isPlaying {
+                if model.refreshing {
+                    VStack(spacing: 10) {
+                        if let percent = model.refreshPercent {
+                            ProgressView(value: percent).frame(width: 220)
+                            Text(trf("Готовлю просмотр… %d%%", Int(percent * 100))).foregroundStyle(.white.opacity(0.85))
+                        } else {
+                            ProgressView().controlSize(.small)
+                            Text(tr("Готовлю просмотр…")).foregroundStyle(.white.opacity(0.85))
+                        }
+                    }
+                } else if !model.isPlaying {
                     Image(systemName: "play.fill")
                         .font(.system(size: 22))
                         .foregroundStyle(.white)

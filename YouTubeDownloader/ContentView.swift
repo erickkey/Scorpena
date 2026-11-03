@@ -159,9 +159,6 @@ struct ContentView: View {
                 })
         }
         .onPreferenceChange(ContentHeightKey.self) { windowFitter.fit(toContent: $0) }
-        // The link field is shared with the clip window: typing in either shows up in both.
-        .onChange(of: urlString) { LinkField.shared.text = $0 }
-        .onReceive(LinkField.shared.$text) { if $0 != urlString { urlString = $0 } }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button {
@@ -191,7 +188,6 @@ struct ContentView: View {
                 .help(tr("История скачиваний"))
                 .buttonStyle(.plain)   // the icons keep one colour: no system highlight on hover
                 Button {
-                    LinkField.shared.text = urlString
                     TrimPanel.shared.show(manager: manager)
                 } label: {
                     ToolbarIcon(name: "scissors")
