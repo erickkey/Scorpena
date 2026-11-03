@@ -914,27 +914,28 @@ struct QualityPicker: View {
     @Binding var height: Int
 
     var body: some View {
-        Menu {
-            Button { height = 0 } label: {
-                if height == 0 { Label(maxLabel, systemImage: "checkmark") } else { Text(maxLabel) }
-            }
-            ForEach(manager.availableHeights, id: \.self) { h in
-                Button { height = h } label: {
-                    if height == h { Label(menuLabel(h), systemImage: "checkmark") } else { Text(menuLabel(h)) }
+        HStack(spacing: 6) {
+            Menu {
+                Button { height = 0 } label: {
+                    if height == 0 { Label(maxLabel, systemImage: "checkmark") } else { Text(maxLabel) }
                 }
-            }
-        } label: {
-            if manager.isProbing {
-                HStack(spacing: 6) { Text(tr("Выбор качества:")).font(.caption); ProgressView().controlSize(.small) }
-            } else {
+                ForEach(manager.availableHeights, id: \.self) { h in
+                    Button { height = h } label: {
+                        if height == h { Label(menuLabel(h), systemImage: "checkmark") } else { Text(menuLabel(h)) }
+                    }
+                }
+            } label: {
                 Text(tr("Выбор качества:") + " " + (height == 0 || !manager.availableHeights.contains(height) ? maxLabel : menuLabel(height)))
                     .font(.caption)
             }
-        }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-        .onChange(of: manager.availableHeights) { heights in
-            if height != 0, !heights.contains(height) { height = 0 }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .onChange(of: manager.availableHeights) { heights in
+                if height != 0, !heights.contains(height) { height = 0 }
+            }
+            // The turning ring stands beside the menu while the qualities are being counted
+            // (a spinner inside a menu button is not drawn by the system).
+            if manager.isProbing { DotsSpinner() }
         }
     }
 

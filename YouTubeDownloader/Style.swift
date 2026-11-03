@@ -526,3 +526,32 @@ extension NSWindow {
         title = tr(String(raw.dropFirst(6)))
     }
 }
+
+
+/// A ring of dots that turns (the brightest dot runs round, the ones behind it fade): «it is counting».
+/// A normal progress wheel cannot be drawn inside a menu button, so this stands beside it.
+struct DotsSpinner: View {
+    var size: CGFloat = 16
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let phase = timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1)
+            Canvas { context, canvasSize in
+                let count = 12
+                let radius = canvasSize.width / 2 - 1.6
+                let center = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2)
+                for i in 0..<count {
+                    let angle = Double(i) / Double(count) * 2 * .pi - .pi / 2
+                    var behind = phase * Double(count) - Double(i)
+                    behind -= floor(behind / Double(count)) * Double(count)
+                    let opacity = max(0.15, 1 - behind / Double(count) * 0.95)
+                    let p = CGPoint(x: center.x + radius * cos(angle), y: center.y + radius * sin(angle))
+                    context.fill(Path(ellipseIn: CGRect(x: p.x - 1.3, y: p.y - 1.3, width: 2.6, height: 2.6)),
+                                 with: .color(.secondary.opacity(opacity)))
+                }
+            }
+            .frame(width: size, height: size)
+        }
+        .frame(width: size, height: size)
+    }
+}
