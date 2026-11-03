@@ -78,10 +78,11 @@ final class DownloadHistory: ObservableObject {
     }
 
     /// One entry for a whole playlist (its link, name, cover and how many videos came down).
-    func recordPlaylist(url: String, title: String?, count: Int, thumbnail: URL?) {
+    func recordPlaylist(url: String, title: String?, count: Int, thumbnail: URL?, folder: URL? = nil) {
         items.removeAll { $0.url == url && $0.isPlaylist }
-        let item = HistoryItem(url: url, title: title, thumbnailFile: nil, audioOnly: false,
+        var item = HistoryItem(url: url, title: title, thumbnailFile: nil, audioOnly: false,
                                date: Date(), playlistCount: count)
+        item.filePath = folder?.path
         items.insert(item, at: 0)
         prune()
         guard let thumbnail else { return }
@@ -101,7 +102,8 @@ final class DownloadHistory: ObservableObject {
     func fileURL(for item: HistoryItem) -> URL? {
         let fm = FileManager.default
         if let path = item.filePath, fm.fileExists(atPath: path) { return URL(fileURLWithPath: path) }
-        guard !item.isPlaylist, let title = item.title else { return nil }
+        if item.isPlaylist { return nil }      // a playlist: only its remembered folder (above)
+        guard let title = item.title else { return nil }
         func plain(_ text: String) -> String { text.lowercased().filter { $0.isLetter || $0.isNumber } }
         let wanted = plain(title)
         guard wanted.count >= 4 else { return nil }
@@ -318,7 +320,7 @@ struct HistoryView: View {
     }
 
     private var locale: Locale {
-        Locale(identifier: languageSettings.language == .en ? "en" : "ru")
+        Locale(identifier: languageSettings.language.localeIdentifier)
     }
 
     /// «Сегодня», «Вчера», then «27 октября» (with the year for earlier years).
@@ -463,10 +465,6 @@ struct HistoryView: View {
                             Text("·")
                             Text(ContentView.formatBytes(size))
                         }
-                        if missingItem == item.id {
-                            Text("·")
-                            Text(tr("Файл не найден")).foregroundStyle(.red)
-                        }
                     }
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -492,25 +490,28 @@ struct HistoryView: View {
         .overlay(alignment: .topTrailing) {
             if hoveredItem == item.id {
                 HStack(spacing: 6) {
-                    // Show the file in Finder (or say that it isn't there any more).
-                    Button {
-                        if FileReveal.show(history.fileURL(for: item)) {
-                            missingItem = nil
-                        } else {
-                            missingItem = item.id
-                            let id = item.id
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { if missingItem == id { missingItem = nil } }
+                    // Show the file (or the playlist's folder) in Finder, or say that it isn't there any more.
+                    if missingItem == item.id {
+                        Text(FileReveal.missingText(folder: item.isPlaylist))
+                            .font(.caption2.weight(.medium)).foregroundStyle(.red).lineLimit(1).fixedSize()
+                    } else {
+                        Button {
+                            if !FileReveal.show(history.fileURL(for: item)) {
+                                missingItem = item.id
+                                let id = item.id
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 3) { if missingItem == id { missingItem = nil } }
+                            }
+                        } label: {
+                            Image(systemName: "folder")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 20, height: 20)
+                                .background(Circle().fill(Color.primary.opacity(0.1)))
+                                .contentShape(Circle())
                         }
-                    } label: {
-                        Image(systemName: "folder")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 20, height: 20)
-                            .background(Circle().fill(Color.primary.opacity(0.1)))
-                            .contentShape(Circle())
+                        .buttonStyle(.plain)
+                        .help(FileReveal.buttonTitle(folder: item.isPlaylist))
                     }
-                    .buttonStyle(.plain)
-                    .help(tr("Показать в папке"))
                     Button { history.remove(id: item.id) } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 9, weight: .bold))

@@ -493,10 +493,18 @@ struct ThinLine: View {
 /// when it is there; when it is not (deleted, moved), nothing opens and the caller says «Файл не найден».
 /// (Asking Finder to select a file that is gone makes it open some folder instead — that was the bug.)
 enum FileReveal {
+    /// The words for the button and for «it is gone» — a file or a whole playlist folder.
+    static func buttonTitle(folder: Bool) -> String { folder ? tr("Показать папку") : tr("Показать файл") }
+    static func missingText(folder: Bool) -> String { folder ? tr("Плейлист не найден") : tr("Файл не найден") }
+
     @discardableResult
     static func show(_ url: URL?) -> Bool {
         guard let url, FileManager.default.fileExists(atPath: url.path) else { return false }
-        NSWorkspace.shared.activateFileViewerSelecting([url])
+        if (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+            NSWorkspace.shared.open(url)          // a playlist's folder opens
+        } else {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        }
         return true
     }
 }

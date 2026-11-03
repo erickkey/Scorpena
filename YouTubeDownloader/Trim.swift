@@ -405,16 +405,28 @@ final class TrimModel: ObservableObject {
     // MARK: Downloading the part
 
     /// Puts the marked part into the download queue, with the choices of the main window.
+    /// The part of the whole file's size that the marks cover.
+    private func clipExpectedBytes(height: Int?, audioOnly: Bool) -> Int64? {
+        guard duration > 0, let whole = manager.expectedSize(height: height, audioOnly: audioOnly) else { return nil }
+        return Int64(Double(whole) * (end - start) / duration)
+    }
+
     func downloadClip(audioOnly: Bool, qualityHeight: Int, stripAudio: Bool, destination: URL) {
         guard sectionIsValid else { return }
         let maxHeight = manager.availableHeights.isEmpty ? nil : (qualityHeight == 0 ? nil : qualityHeight)
         let item = QueuedDownload(url: link, destination: destination, maxHeight: maxHeight,
                                   audioOnly: audioOnly, stripAudio: stripAudio,
                                   videoFormat: .current, audioFormat: .current,
-                                  knownTitle: title, section: section)
+                                  knownTitle: title, section: section,
+                                  expectedBytes: clipExpectedBytes(height: maxHeight, audioOnly: audioOnly))
+        if DownloadQueue.shared.isActive(url: link, audioOnly: audioOnly, section: section) {
+            queuedNote = tr("Этот отрывок уже скачивается или стоит в очереди")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in self?.queuedNote = nil }
+            return
+        }
         DownloadQueue.shared.submitUnlessDownloaded(item) { [weak self] in
-            self?.queuedNote = tr("Фрагмент добавлен в загрузки")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 4) { self?.queuedNote = nil }
+            self?.queuedNote = tr("Фрагмент добавлен в загрузки. Выбери ещё один или закрой окно")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 8) { self?.queuedNote = nil }
         }
     }
 }
@@ -461,18 +473,30 @@ struct TrimView: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            linkField
+            VStack(spacing: 4) {
+                linkField
+                // The same line as under the main window's field.
+                let hint = ContentView.linkHint(link.text)
+                HStack {
+                    Text(hint?.text ?? " ").foregroundStyle(hint?.color ?? .secondary).opacity(hint == nil ? 0 : 1)
+                    Spacer(minLength: 0)
+                }
+                .font(.caption)
+            }
             playerArea
-            if model.phase == .ready {
+            // The controls are there from the start, grey and out of reach until a video is open.
+            Group {
                 TrimTimeline(model: model)
                 markRow
                 optionsRow
             }
+            .disabled(model.phase != .ready)
+            .opacity(model.phase == .ready ? 1 : 0.4)
             Spacer(minLength: 0)
             bottomRow
         }
         .padding(EdgeInsets(top: 20, leading: 24, bottom: 18, trailing: 24))
-        .frame(width: 660, height: 706)
+        .frame(width: 660, height: 724)
         .onAppear { model.linkChanged() }
     }
 
@@ -494,12 +518,29 @@ struct TrimView: View {
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color(nsColor: .separatorColor)))
     }
 
+    /// The frame is always 16:9 and as wide as the window; whatever is inside (a message, the video)
+    /// is laid over it and can never change its shape.
     private var playerArea: some View {
+        Color.clear
+            .frame(maxWidth: .infinity)
+            .aspectRatio(16.0 / 9.0, contentMode: .fit)
+            .overlay { playerContent }
+            .overlay(alignment: .bottomLeading) {
+                if model.phase == .ready {
+                    Text(tr("Просмотр в сниженном качестве. Скачается в том, что выбрано ниже"))
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.6))
+                        .padding(8)
+                }
+            }
+    }
+
+    private var playerContent: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 10).fill(Color.black.opacity(0.9))
             switch model.phase {
             case .empty:
-                Text(tr("Вставь ссылку — ролик откроется здесь"))
+                Text(tr("Вставь ссылку и ролик откроется здесь"))
                     .foregroundStyle(.white.opacity(0.6))
             case .preparing(let percent):
                 VStack(spacing: 10) {
@@ -518,6 +559,7 @@ struct TrimView: View {
                         .foregroundStyle(.white.opacity(0.85))
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity)
                     if diskAccess {
                         Button(tr("Открыть настройки")) {
                             if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
@@ -544,15 +586,6 @@ struct TrimView: View {
                         .background(Circle().fill(Color.black.opacity(0.45)))
                         .allowsHitTesting(false)
                 }
-            }
-        }
-        .aspectRatio(16.0 / 9.0, contentMode: .fit)
-        .overlay(alignment: .bottomLeading) {
-            if model.phase == .ready {
-                Text(tr("Просмотр в сниженном качестве. Скачается в том, что выбрано ниже"))
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.6))
-                    .padding(8)
             }
         }
     }
@@ -597,13 +630,16 @@ struct TrimView: View {
                     downloadMode = "audio"
                 }
             }
+            // Sound only has no picture to choose the quality of.
             HStack(spacing: 8) {
-                Toggle(tr("без звука"), isOn: $videoNoAudio)
-                    .toggleStyle(.checkbox)
-                    .disabled(downloadMode == "audio")
-                Text("·")
-                QualityPicker(manager: manager, link: model.link, height: $qualityHeight)
+                if downloadMode != "audio" {
+                    Toggle(tr("без звука"), isOn: $videoNoAudio)
+                        .toggleStyle(.checkbox)
+                    Text("·")
+                    QualityPicker(manager: manager, link: model.link, height: $qualityHeight)
+                }
             }
+            .frame(minHeight: 20)
             .font(.caption)
             .foregroundStyle(.secondary)
             Text(sizeText)
@@ -632,9 +668,7 @@ struct TrimView: View {
         VStack(spacing: 8) {
             // Notes have a line of their own: beside the buttons they squeezed the labels into two lines.
             Group {
-                if model.phase == .ready, !model.sectionIsValid {
-                    Text(tr("Конец должен быть позже начала")).foregroundStyle(.red)
-                } else if let note = model.queuedNote {
+                if let note = model.queuedNote {
                     Text(note).foregroundStyle(.green)
                 } else {
                     Text(" ")
@@ -654,7 +688,7 @@ struct TrimView: View {
                 .buttonStyle(SoftPillStyle())
                 .disabled(!model.sectionIsValid)
                 Spacer()
-                Button { onClose() } label: { Text(tr("Отмена")).lineLimit(1).fixedSize() }
+                Button { onClose() } label: { Text(tr("Закрыть")).lineLimit(1).fixedSize() }
                     .buttonStyle(SoftPillStyle())
                 Button {
                     model.downloadClip(audioOnly: downloadMode == "audio", qualityHeight: qualityHeight,
@@ -735,8 +769,8 @@ private struct TrimTimeline: View {
 
 // MARK: - Quality choice shared by the clip window and the queue window
 
-/// «Качество: …» — the same menu as on the main window: nothing is known until «Проверить качество»
-/// (or the clip window's own check) has run for the link, then every height with its size.
+/// «Выбор качества: …» — the one menu of the main, queue and clip windows: nothing is known until
+/// the link's automatic quality check is done, then every height with its size.
 struct QualityPicker: View {
     @ObservedObject var manager: DownloadManager
     let link: String
@@ -744,9 +778,6 @@ struct QualityPicker: View {
 
     var body: some View {
         Menu {
-            Button(tr("Проверить качество")) { manager.probeQuality(urlString: link) }
-                .disabled(!ContentView.isPlausibleURLString(link) || manager.isProbing || !manager.availableHeights.isEmpty)
-            Divider()
             Button { height = 0 } label: {
                 if height == 0 { Label(maxLabel, systemImage: "checkmark") } else { Text(maxLabel) }
             }
@@ -757,9 +788,9 @@ struct QualityPicker: View {
             }
         } label: {
             if manager.isProbing {
-                HStack(spacing: 6) { Text(tr("Качество:")).font(.caption); ProgressView().controlSize(.small) }
+                HStack(spacing: 6) { Text(tr("Выбор качества:")).font(.caption); ProgressView().controlSize(.small) }
             } else {
-                Text(tr("Качество:") + " " + (height == 0 || !manager.availableHeights.contains(height) ? maxLabel : menuLabel(height)))
+                Text(tr("Выбор качества:") + " " + (height == 0 || !manager.availableHeights.contains(height) ? maxLabel : menuLabel(height)))
                     .font(.caption)
             }
         }
@@ -773,7 +804,7 @@ struct QualityPicker: View {
     private var maxLabel: String {
         guard !manager.availableHeights.isEmpty else { return tr("Максимально доступное") }
         if let h = manager.availableHeights.first, let bytes = manager.approxSizeByHeight[h] {
-            return trf("Максимальное — %@", "≈ " + ContentView.formatBytes(bytes))
+            return trf("Максимальное: %@", "≈ " + ContentView.formatBytes(bytes))
         }
         return tr("Максимальное")
     }
@@ -785,7 +816,7 @@ struct QualityPicker: View {
         case 1440: name = "1440p (2K)"
         default:   name = "\(h)p"
         }
-        if let bytes = manager.approxSizeByHeight[h] { return "\(name) — ≈ " + ContentView.formatBytes(bytes) }
+        if let bytes = manager.approxSizeByHeight[h] { return "\(name), ≈ " + ContentView.formatBytes(bytes) }
         return name
     }
 }

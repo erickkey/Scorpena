@@ -53,7 +53,7 @@ enum AppInstaller {
     }
 
     private static var unpackMessage: String {
-        tr("Скачанный файл не открылся — возможно, загрузка прервалась. Попробуй ещё раз.")
+        tr("Скачанный файл не открылся: возможно, загрузка прервалась. Попробуй ещё раз.")
     }
 
     /// Human reason for any error the update can run into.

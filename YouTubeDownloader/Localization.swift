@@ -1,21 +1,60 @@
 import Foundation
 import Combine
 
-/// Only Russian and English for now — a friend-facing app, not a global
-/// product. Every user-facing string in the app is authored in Russian and
+/// Russian, English, Chinese, Hindi and Spanish. Every user-facing string in the app is authored in Russian and
 /// passed through `tr`/`trf`; internal-only text (the technical log, the
 /// Telegram error reports and feedback messages the developer reads) is
 /// intentionally left untranslated regardless of this setting, since it's
 /// never shown to the person using the app.
 enum AppLanguage: String, CaseIterable, Identifiable {
-    case ru, en
+    case ru, en, zh, hi, es
 
     var id: String { rawValue }
 
+    /// The name of the language in the language itself.
     var displayName: String {
         switch self {
         case .ru: return "Русский"
         case .en: return "English"
+        case .zh: return "中文"
+        case .hi: return "हिन्दी"
+        case .es: return "Español"
+        }
+    }
+
+    var flag: String {
+        switch self {
+        case .ru: return "🇷🇺"
+        case .en: return "🇺🇸"
+        case .zh: return "🇨🇳"
+        case .hi: return "🇮🇳"
+        case .es: return "🇪🇸"
+        }
+    }
+
+    /// The language of the Mac's own settings, when the app speaks it; English otherwise.
+    static var system: AppLanguage {
+        for code in Locale.preferredLanguages {
+            let base = String(code.prefix(2)).lowercased()
+            if let found = AppLanguage(rawValue: base) { return found }
+        }
+        return .en
+    }
+
+    /// Decimal comma (1,5) in Russian and Spanish, decimal point (1.5) in the others.
+    var usesDecimalComma: Bool { self == .ru || self == .es }
+
+    /// For dates and times.
+    var localeIdentifier: String { self == .zh ? "zh-Hans" : rawValue }
+
+    /// Which recorded «download complete» voice belongs to the language.
+    var voiceSuffix: String {
+        switch self {
+        case .ru: return ""
+        case .en: return "EN"
+        case .zh: return "CN"
+        case .hi: return "HI"
+        case .es: return "ES"
         }
     }
 }
@@ -41,7 +80,8 @@ final class LanguageSettings: ObservableObject {
 
     private init() {
         let raw = UserDefaults.standard.string(forKey: languageDefaultsKey)
-        language = raw.flatMap(AppLanguage.init(rawValue:)) ?? .ru
+        // Never chosen yet: the language of the Mac (the choice window shows it as the first pick).
+        language = raw.flatMap(AppLanguage.init(rawValue:)) ?? AppLanguage.system
     }
 }
 
@@ -49,8 +89,13 @@ final class LanguageSettings: ObservableObject {
 /// to English; returns it unchanged otherwise (including when no
 /// translation is on file — better a Russian string than a blank one).
 func tr(_ russian: String) -> String {
-    guard LanguageSettings.shared.language == .en else { return russian }
-    return Translations.en[russian] ?? russian
+    switch LanguageSettings.shared.language {
+    case .ru: return russian
+    case .en: return Translations.en[russian] ?? russian
+    case .zh: return Translations.zh[russian] ?? Translations.en[russian] ?? russian
+    case .hi: return Translations.hi[russian] ?? Translations.en[russian] ?? russian
+    case .es: return Translations.es[russian] ?? Translations.en[russian] ?? russian
+    }
 }
 
 /// Same as `tr`, for strings that carry interpolated values. Dictionary
@@ -63,6 +108,7 @@ func trf(_ russianFormat: String, _ args: CVarArg...) -> String {
 
 enum Translations {
     static let en: [String: String] = [
+        "Выбери язык": "Choose your language",
         "Свернуть все": "Collapse all",
         "Развернуть все": "Expand all",
         "Напоминание об очистке": "Cleanup reminder",
@@ -81,10 +127,7 @@ enum Translations {
 
         // MARK: Header / footer
         "Дополнительно": "Advanced",
-        "Оформление": "Appearance",
         "Светлая / тёмная тема": "Light / dark theme",
-        "Нативное приложение для Mac, которое скачивает видео и аудио с YouTube, VK, Instagram, TikTok, Vimeo и ещё почти 1750 сайтов одной кнопкой.\nПоказ реального размера файла перед скачиванием, поддержка ссылок в любом виде и умная подстановка из буфера обмена.":
-            "A native Mac app that downloads video and audio from YouTube, VK, Instagram, TikTok, Vimeo, and almost 1750 other sites with one click.\nShows the real file size before downloading, understands links in any form, and smartly fills in a link from your clipboard.",
         "О программе": "About",
         "Правовая информация": "Legal Information",
         "Обратная связь": "Feedback",
@@ -94,10 +137,8 @@ enum Translations {
         "Доступно обновление": "Update available",
 
         // MARK: URL field
-        "Ссылка на видео": "Video link",
-        "https://vk.com/video…  или  https://www.youtube.com/watch?v=…":
-            "https://vk.com/video…  or  https://www.youtube.com/watch?v=…",
-        "Кажется, это не ссылка — проверь, что скопировалось": "Doesn't look like a link — check what you copied",
+        "Кажется, это не ссылка: проверь, что скопировалось":
+            "Doesn't look like a link: check what you copied",
         "Это главная страница сайта, а не ссылка на видео": "That's the site's homepage, not a link to a video",
         "История скачиваний": "Download history",
         "Пока нет скачиваний": "No downloads yet",
@@ -108,45 +149,35 @@ enum Translations {
         "Список будет удалён. Скачанные файлы не затрагиваются.": "The list will be deleted. Downloaded files are not affected.",
         "Видео": "Video",
         "Звук": "Audio",
-        "Необычный сайт — программа попробует, но результат не гарантирован": "Unusual site — the app will try, but success isn't guaranteed",
+        "Необычный сайт: программа попробует, но результат не гарантирован":
+            "Unusual site: the app will try, but success isn't guaranteed",
         "Сайт есть в списке поддерживаемых ✅": "Site is in the supported list ✅",
         "видео": "video",
 
         // MARK: Quality section
-        "Качество": "Quality",
-        "Качество видео": "Video quality",
-        "Качество видео (доступное для этого видео)": "Video quality (available for this video)",
         "Максимально доступное": "Best available",
         "Максимальное": "Best",
-        "Максимальное — %@": "Best — %@",
-        "Проверить качество": "Check quality",
-        "Необязательно — можно сразу нажать «Скачать».\nПроверка займёт немного времени, зато сразу покажет все доступные варианты качества и размер файла.":
-            "Optional — you can just click “Download” right away.\nChecking takes a little time, but shows every available quality and its file size upfront.",
+        "Максимальное: %@":
+            "Best: %@",
 
         // MARK: Destination
-        "Папка назначения": "Destination folder",
-        "Выбрать…": "Choose…",
         "Куда сохранять видео": "Where to save videos",
 
         // MARK: Action row
         "Отменить": "Cancel",
-        "Скачать видео": "Download video",
-        "Скачать звук": "Download audio",
         "Показать файл": "Show file",
-        "Скачать видео без звука": "Download video without audio",
-        "«Скачать видео» / .mp4 (h.264) ": "“Download video” / .mp4 (H.264) ",
-        "(автоматическое преобразование)": "(automatic conversion)",
-        "«Скачать звук» / .mp3 (320 kbps)": "“Download audio” / .mp3 (320 kbps)",
 
         // MARK: Progress / status
         "с": "s",
         "Программа запрашивает у сайта данные о видео: адреса потоков и способ обхода защиты. Обычно 2–10 секунд.":
             "The app is asking the site for the video's info: stream addresses and how to get past its protection. Usually 2–10 seconds.",
-        "Сайт отдаёт видео множеством мелких кусков, а не одним файлом — их приходится качать по очереди, поэтому медленнее обычного. У Vimeo почти всегда так.":
-            "The site serves the video in lots of tiny pieces instead of one file — they have to be downloaded one by one, so it's slower than usual. Vimeo almost always does this.",
+        "Сайт отдаёт видео множеством мелких кусков, а не одним файлом. Их приходится качать по очереди, поэтому медленнее обычного. У Vimeo почти всегда так.":
+            "The site serves the video in lots of tiny pieces instead of one file. They have to be downloaded one by one, so it's slower than usual. Vimeo almost always does this.",
         "Сообщить об ошибке": "Report a problem",
-        "Отправлено (обращение №%@) — спасибо!": "Sent (ticket #%@) — thanks!",
-        "Не удалось отправить — текст скопирован, отправь вручную в Telegram": "Couldn't send it — the text was copied, send it manually via Telegram",
+        "Отправлено (обращение №%@). Спасибо!":
+            "Sent (ticket #%@). Thanks!",
+        "Не удалось отправить. Текст скопирован, отправь вручную в Telegram":
+            "Couldn't send it. The text was copied, send it manually via Telegram",
 
         // MARK: Banners
         "Чтобы программа могла показать сайту, что ты не робот, используя куки.": "So the app can show the site that you’re not a robot, using cookies.",
@@ -160,11 +191,12 @@ enum Translations {
         "Язык": "Language",
 
         // MARK: What's New
-        "Круто": "Cool!",
+        "Круто": "Cool",
         "Список изменений": "What's New",
         "Сейчас идёт скачивание": "A download is in progress",
         "Отчёты о сбоях": "Crash reports",
-        "Программа скачивает видео с помощью внутренних инструментов и сама их обновляет. Если видео перестало скачиваться — нажми «Проверить сейчас».": "The app downloads videos using internal tools and updates them by itself. If videos stop downloading, press “Check now”.",
+        "Программа скачивает видео с помощью внутренних инструментов и сама их обновляет. Если видео перестало скачиваться, нажми «Проверить сейчас».":
+            "The app downloads videos using internal tools and updates them by itself. If videos stop downloading, press “Check now”.",
         "Проверить сейчас": "Check now",
         "Проверяю…": "Checking…",
         "У тебя последняя версия (%@). Проверка заняла %d с.": "You have the latest version (%@). The check took %d s.",
@@ -173,8 +205,10 @@ enum Translations {
         "Проверяю на GitHub, вышла ли новая версия…": "Checking GitHub for a new version…",
         "Обычно занимает до минуты.": "Usually takes up to a minute.",
         "yt-dlp %@": "yt-dlp %@",
-        "Новая версия %@ не прошла проверку — оставил %@.": "The new version %@ didn't pass the check — kept %@.",
-        "Не удалось проверить обновления — нет связи с интернетом.": "Couldn't check for updates — no internet connection.",
+        "Новая версия %@ не прошла проверку, оставил %@.":
+            "The new version %@ didn't pass the check, kept %@.",
+        "Не удалось проверить обновления: нет связи с интернетом.":
+            "Couldn't check for updates: no internet connection.",
         "Отправлять разработчику анонимные отчёты о сбоях": "Send anonymous crash reports to the developer",
         "Анонимно, без ссылок и личных данных.": "Anonymous, no links or personal data.",
         "Дождись окончания скачивания и нажми кнопку обновления ещё раз.": "Wait for the download to finish, then press the update button again.",
@@ -190,12 +224,14 @@ enum Translations {
         "Отлично": "Great",
         "Обновиться не получилось": "The update didn't work out",
         "Ничего не сломалось: осталась прежняя версия.": "Nothing broke: the previous version is still in place.",
-        "Новая версия не запустилась, поэтому вернули прежнюю. Ничего не сломалось — можно скачать новую вручную.": "The new version wouldn't start, so the previous one was put back. Nothing broke — you can download the new one manually.",
+        "Новая версия не запустилась, поэтому вернули прежнюю. Ничего не сломалось, можно скачать новую вручную.":
+            "The new version wouldn't start, so the previous one was put back. Nothing broke, you can download the new one manually.",
         "Скачать вручную": "Download manually",
         "Нет связи с интернетом или GitHub недоступен. Проверь подключение и попробуй ещё раз.": "No internet connection, or GitHub is unreachable. Check your connection and try again.",
         "GitHub не отдал файл обновления (код %d). Попробуй позже или скачай вручную.": "GitHub didn't serve the update file (code %d). Try later or download it manually.",
         "Не хватает места на диске. Освободи около 1 ГБ и попробуй снова.": "Not enough disk space. Free up about 1 GB and try again.",
-        "Скачанный файл не открылся — возможно, загрузка прервалась. Попробуй ещё раз.": "The downloaded file wouldn't open — the download may have been interrupted. Try again.",
+        "Скачанный файл не открылся: возможно, загрузка прервалась. Попробуй ещё раз.":
+            "The downloaded file wouldn't open: the download may have been interrupted. Try again.",
         "Скачанный файл повреждён или не подходит к этому приложению.": "The downloaded file is damaged or doesn't match this app.",
         "Что-то пошло не так: %@": "Something went wrong: %@",
         "Список изменений (v.%@)": "What's New (v.%@)",
@@ -214,18 +250,16 @@ enum Translations {
         "Выбор языка (русский/английский) — при первом запуске, и в любой момент в «Дополнительно».":
             "A language choice (Russian/English) — on first launch, and any time after in “Advanced”.",
         "«Дополнительно» — теперь отдельное окно, а не выпадающий список внизу.":
-            "“Advanced” is now its own window instead of a dropdown at the bottom.",
+            "“Advanced” — now its own window, not a dropdown at the bottom.",
         "«Поделиться» — можно быстро отправить другу ссылку на программу.":
             "“Share” — quickly send a friend a link to the app.",
         "Обновление встроенных инструментов — понятный раздел: «Проверить обновление» показывает, есть ли новая версия, кнопка «Обновить» активна только когда реально есть что обновлять.":
             "Built-in tools update — a clear section: “Check for update” shows whether a new version exists, and “Update” is only enabled when there's actually something to update.",
         "«Обратная связь» — отдельный раздел: написать вопрос, пожелание или что угодно ещё, по желанию оставив имя и контакт.":
             "“Feedback” — a dedicated section: write a question, a suggestion, or anything else, optionally leaving your name and contact.",
-        "Можно запомнить нужный размер окна — при выходе программа спросит, сохранить ли его.":
-            "You can save your preferred window size — the app asks whether to remember it when you quit.",
         "Программа переименована": "The app has been renamed",
         "Переименовываю…": "Renaming…",
-        "Секунду, сейчас программа перезапустится.": "One moment — the app is about to restart.",
+        "Секунду, сейчас программа перезапустится.": "One second, the app is about to restart.",
         "Ладно": "OK",
         "Теперь она называется Scorpena – video downloader. Настройки и история на месте. Программа один раз перезапустится. Если рядом осталась старая копия, её можно удалить.": "It's now called Scorpena – video downloader. Your settings and history are untouched. The app will restart once. If an old copy is left next to it, you can delete it.",
         "Теперь она называется Scorpena – video downloader. Настройки и история на месте. Если рядом осталась старая копия, её можно удалить.": "It's now called Scorpena – video downloader. Your settings and history are untouched. If an old copy is left next to it, you can delete it.",
@@ -237,29 +271,55 @@ enum Translations {
         "Внутри программы не хватает файлов": "Some files inside the app are missing",
         "Скачай Scorpena заново: все файлы встанут на место, настройки и история сохранятся.": "Download Scorpena again: everything will be put back in place, and your settings and history are kept.",
         "Открыть страницу загрузки": "Open the download page",
-        "Скачивания платного и защищённого видео (Netflix, Кинопоиск, ivi, Okko и т.д.): оно закрыто DRM, системой шифрования от копирования.": "Downloading paid and protected video (Netflix, Kinopoisk, ivi, Okko, etc.): it is locked with DRM, an encryption system against copying.",
+        "Скачивания платного и защищённого видео (Netflix, Disney+, Prime Video, Apple TV+, Кинопоиск, ivi, Okko и т.д.): оно закрыто DRM, системой шифрования от копирования.": "Downloading paid and protected video (Netflix, Disney+, Prime Video, Apple TV+, Kinopoisk, ivi, Okko, etc.): it is locked with DRM, an encryption system against copying.",
         "Записи идущих прямых эфиров: только уже завершённых.": "Recording live streams that are still going: only finished ones.",
-        "Скачивания плейлистов.": "Downloading playlists.",
         "Звук уведомления о скачивании": "Download notification sound",
         "Звук запуска приложения": "App launch sound",
-        "Конвертация в %@…": "Converting to %@…",
-        "Качество:": "Quality:",
+        "Выбор качества:": "Choose quality:",
+        "Показать папку": "Show folder",
+        "Скачивает видео и звук: MP4, MOV, WebM, MKV, MP3, WAV, M4A": "Downloads video and audio: MP4, MOV, WebM, MKV, MP3, WAV, M4A",
+        "Показывает, какое качество есть и сколько весит файл, ещё до скачивания": "Shows which qualities are available and how big the file is, before you download",
+        "Сама подставляет ссылку, которую ты скопировал": "Fills in the link you copied by itself",
+        "Качает несколько видео сразу и плейлисты целиком": "Downloads several videos at once and whole playlists",
+        "Вырезает из видео только нужный кусок": "Cuts out just the part of a video you need",
+        "Если закрыл программу или пропал интернет, скачивание продолжится": "If you close the app or the internet drops, the download carries on",
+        "Хранит очередь и историю скачиваний": "Keeps the queue and the download history",
+        "Можно ограничить скорость, чтобы интернет не тормозил": "You can limit the speed so the internet doesn't slow down",
+        "Обновляется сама одной кнопкой": "Updates itself with one button",
+        "Русский, английский, китайский, хинди и испанский": "Russian, English, Chinese, Hindi and Spanish",
+        "Работает на любом Mac (Intel и Apple Silicon), macOS 13 и новее": "Works on any Mac (Intel and Apple Silicon), macOS 13 or later",
+        "Новое": "New",
+        "Улучшения": "Improvements",
+        "Исправлено": "Fixed",
+        "Ножницы: можно вырезать из видео нужный кусок и скачать только его": "Scissors: cut the part you need out of a video and download only that",
+        "Светлая и тёмная тема": "Light and dark theme",
+        "Галочка «Открывать папку после загрузки»": "The “Open the folder after the download” checkbox",
+        "Ссылки на видео можно вставлять прямо в окне очереди, как на главной": "Video links can be pasted right in the queue window, as on the main one",
+        "В истории видно, сколько длится видео и когда его скачали, записи можно удалять": "History shows how long a video is and when it was downloaded; entries can be removed",
+        "Плейлист скачивается в свою папку": "A playlist downloads into its own folder",
+        "Качество определяется, как только вставишь ссылку": "The quality is detected as soon as you paste a link",
+        "Полоса скачивания больше не дёргается, рядом написано, сколько уже скачано": "The download bar no longer jerks, and next to it you can see how much has been downloaded",
+        "Новые значки, окна закрываются на Esc": "New icons, windows close with Esc",
+        "Полоса скачивания больше не замирает и не идёт назад": "The download bar no longer freezes or goes back",
+        "Если поменять скорость во время скачивания, оно не сбрасывается": "Changing the speed during a download no longer resets it",
+        "Для звука больше не показывается качество видео": "The video quality is no longer shown for audio",
+        "Общие улучшения стабильности": "General stability improvements",
+        "Этот отрывок уже скачивается или стоит в очереди": "This clip is already downloading or waiting in the queue",
+        "Файл уже скачан": "File already downloaded",
+        "Плейлист не найден": "Playlist not found",
         "Вставь ссылку на видео": "Paste a video link",
         "Скачать": "Download",
         "без звука": "no audio",
-        "Качество (доступное для этого видео):": "Quality (available for this video):",
-        "Выбрать папку для сохранения": "Choose where to save",
         "Папка:": "Folder:",
         "%d Мбит/с": "%d Mbit/s",
         "≈ %@ МБ/с": "≈ %@ MB/s",
-        "Упаковка в %@…": "Packing into %@…",
-        "Формат видео": "Video format",
-        "Формат звука": "Audio format",
         "Скорость скачивания": "Download speed",
         "Пауза": "Pause",
         "Продолжить": "Resume",
-        "Пауза — нажми «Продолжить»": "Paused — press “Resume”",
-        "Нет связи — жду и продолжу сам…": "No connection — waiting, will carry on by itself…",
+        "Пауза: нажми «Продолжить»":
+            "Paused: press “Resume”",
+        "Нет связи, жду и продолжу сам…":
+            "No connection, waiting to carry on by itself…",
         "Скачивание не закончилось": "The download didn't finish",
         "Не докачано: %@. Продолжить с того места, где остановилось?": "Not finished: %@. Continue from where it stopped?",
         "Не нужно": "No thanks",
@@ -275,7 +335,7 @@ enum Translations {
         "Обновление программы теперь одной кнопкой (наконец-то).": "Updating the app is now one button (finally).",
         "Встроенный загрузчик обновляется сам.": "The built-in downloader updates itself.",
         "История скачиваний.": "Download history.",
-        "Поправлен баг – новая скопированная ссылка теперь сама заменяет старую.": "Fixed a bug — a newly copied link now replaces the old one by itself.",
+        "Поправлен баг – новая скопированная ссылка теперь сама заменяет старую.": "Fixed a bug – a newly copied link now replaces the old one by itself.",
         "Анонимные отчёты о сбоях теперь автоматические (отключаются в «Дополнительно»).": "Anonymous crash reports are now automatic (you can turn them off in “Advanced”).",
         "Версия программы видна в шапке окна.": "The app version is shown in the header.",
         "Технический журнал скрыт от пользователя.": "The technical log is now hidden from the user.",
@@ -285,14 +345,13 @@ enum Translations {
         "Сайты периодически меняют защиту. Если видео перестало скачиваться, зайди в раздел «Дополнительно» (⚙) и проверь обновления встроенных инструментов.":
             "Sites change their protection from time to time. If a video stops downloading, open “Advanced” (⚙) and check for updates to the built-in tools.",
         "Скопируй ссылку и нажми «Скачать»": "Copy the link and hit “Download”",
-        "Нативное приложение для Mac — скачивает видео и аудио с YouTube, VK, Instagram, TikTok, Vimeo и ещё ~1750 сайтов одним кликом. Видео — в MP4, MOV, WebM или MKV, звук — в MP3, WAV или M4A: формат выбирается рядом с кнопками скачивания.":
-            "A native Mac app — downloads video and audio from YouTube, VK, Instagram, TikTok, Vimeo, and ~1750 other sites in one click. Video as MP4, MOV, WebM or MKV, audio as MP3, WAV or M4A: pick the format next to the download buttons.",
+        "Нативное приложение для Mac. Скачивает видео и аудио с YouTube, VK, Instagram, TikTok, Vimeo и ещё ~1750 сайтов одним кликом. Видео в MP4, MOV, WebM или MKV, звук в MP3, WAV или M4A: формат выбирается рядом с кнопками скачивания.":
+            "A native Mac app. Downloads video and audio from YouTube, VK, Instagram, TikTok, Vimeo and ~1750 more sites in one click. Video as MP4, MOV, WebM or MKV, audio as MP3, WAV or M4A: the format is chosen next to the download buttons.",
         "Что есть": "What's included",
         "Размер файла и доступное качество видны до скачивания.": "File size and available quality are shown before downloading.",
         "Ссылка из буфера обмена подставляется сама.": "A link from the clipboard is filled in automatically.",
         "Отчёт об ошибке разработчику в один клик.": "Error report to the developer in one click.",
         "Русский и английский языки.": "Russian and English languages.",
-        "История последних скачиваний.": "History of recent downloads.",
         "Несколько скачиваний одновременно, остальные ждут в очереди.": "Several downloads at once, the rest wait in the queue.",
         "Плейлисты целиком.": "Whole playlists.",
         "Встречайте! Новое название и новый дизайн!": "Meet the new name and the new design!",
@@ -313,8 +372,8 @@ enum Translations {
         "Благодарю": "Thanks",
 
         // MARK: Feedback window
-        "Вопросы, предложения, ошибки — что угодно. Уходит прямо разработчику.":
-            "Questions, suggestions, bugs — anything at all. Goes straight to the developer.",
+        "Вопросы, предложения, ошибки: что угодно. Уходит прямо разработчику.":
+            "Questions, suggestions, bugs: anything at all. Goes straight to the developer.",
         "Обращение": "Message",
         "Напиши сюда…": "Write here…",
         "Имя (необязательно)": "Name (optional)",
@@ -326,16 +385,16 @@ enum Translations {
         "Подожди ещё %d с перед следующим сообщением.": "Please wait %d more seconds before sending another message.",
 
         // MARK: Legal window
-        "Это не юридическая консультация, а общие ориентиры. Законы отличаются в разных странах, поэтому перед использованием программы проверь, что допускает закон в твоей стране. Если сомневаешься — консультируйся с юристом.":
-            "This isn't legal advice, just general guidance. Laws differ between countries, so check what's allowed where you live before using the app. Consult a lawyer if you're unsure.",
+        "Это не юридическая консультация, а общие ориентиры. Законы отличаются в разных странах, поэтому перед использованием программы проверь, что допускает закон в твоей стране. Если сомневаешься, консультируйся с юристом.":
+            "This isn't legal advice, just general guidance. Laws differ between countries, so check what's allowed where you live before using the app. If you're unsure, consult a lawyer.",
         "Сама программа легальна.": "The app itself is legal.",
-        "Внутри — открытый движок yt-dlp, Scorpena – video downloader просто удобная оболочка над ним. Она не взламывает сайты: берёт те же потоки, что сайт и так отдаёт браузеру.":
-            "Under the hood is the open-source yt-dlp engine — Scorpena – video downloader is just a convenient shell around it. It doesn't hack sites: it fetches the same streams a site already serves to a browser.",
+        "Внутри открытый движок yt-dlp. Scorpena – video downloader просто удобная оболочка над ним. Она не взламывает сайты: берёт те же потоки, что сайт и так отдаёт браузеру.":
+            "Under the hood is the open-source yt-dlp engine. Scorpena – video downloader is just a convenient shell around it. It doesn't hack sites: it fetches the same streams a site already serves to a browser.",
         "Scorpena – video downloader позволяет сохранять видео и аудио локально. Убедись, что твоё использование соответствует законодательству твоей страны и условиям сервиса, с которого ты скачиваешь контент.":
             "Scorpena – video downloader lets you save video and audio locally. Make sure your use complies with the law in your country and the terms of the service you're downloading from.",
         "Нельзя:": "Not allowed:",
-        "обходить платную подписку и DRM (Netflix, Кинопоиск и т.д.) — программа этого и не умеет.":
-            "bypassing a paid subscription or DRM (Netflix, Kinopoisk, etc.) — the app can't do this anyway.",
+        "обходить платную подписку и DRM (Netflix, Disney+, Prime Video, Apple TV+, Кинопоиск и т.д.): программа этого и не умеет.":
+            "bypassing a paid subscription or DRM (Netflix, Disney+, Prime Video, Apple TV+, Kinopoisk, etc.): the app can't do this anyway.",
         "Ответственность": "Responsibility",
         "Автор не отвечает за то, какие видео и с каких сайтов ты скачиваешь, и за соблюдение тобой законов, авторских прав и правил этих сайтов.":
             "The author isn't responsible for what videos or sites you download from, or for your compliance with laws, copyright, or those sites' rules.",
@@ -351,10 +410,6 @@ enum Translations {
             "In case of a serious failure the app may send the developer a short anonymous report with no links or personal data. You can turn this off in “Advanced”.",
 
         // MARK: DownloadManager — probe status
-        "Проверяю доступные качества… %d с": "Checking available qualities… %d s",
-        "Доступно (%@ с): ": "Available (%@ s): ",
-        "Не удалось определить качества за %@ с — при скачивании возьмётся максимум доступное.":
-            "Couldn't determine available qualities in %@ s — the download will use the best available quality.",
 
         // MARK: DownloadManager — tooling
         "Не удалось проверить обновления.": "Couldn't check for updates.",
@@ -362,19 +417,16 @@ enum Translations {
         // MARK: DownloadManager — download flow
         "Вставь ссылку на видео.": "Paste a video link.",
         "Скачивание сейчас начнётся…": "Download will start now…",
-        "Нужен вход — пробую %@…": "Login required — trying %@…",
+        "Нужен вход, пробую %@…":
+            "Login required, trying %@…",
         "без входа": "without login",
         "cookies из %@": "cookies from %@",
         "Не удалось запустить %@: %@": "Couldn't launch %@: %@",
-        "Перекодирование в H.264… %d%%": "Transcoding to H.264… %d%%",
         "Скачивание аудио… ": "Downloading audio… ",
         "Скачивание… ": "Downloading… ",
-        "Объединение видео и звука…": "Merging video and audio…",
-        "Упаковка в MP4…": "Packaging into MP4…",
         "Скачивание аудио…": "Downloading audio…",
         "Скачивание…": "Downloading…",
         "Отменено": "Cancelled",
-        "Готово ✅ (MP3 320 kbps)": "Done ✅ (MP3 320 kbps)",
         "Нужен доступ к диску": "Disk access required",
         "Очередь загрузок": "Download queue",
         "Очередь пуста": "The queue is empty",
@@ -385,13 +437,11 @@ enum Translations {
         "Убрать из списка": "Remove from the list",
         "Это плейлист": "This is a playlist",
         "Скачать весь плейлист или только это видео?": "Download the whole playlist or just this video?",
-        "Скачать все видео из плейлиста? Они встанут в очередь загрузок.": "Download all the videos in the playlist? They will go into the download queue.",
         "Весь плейлист": "Whole playlist",
         "Только это видео": "Just this video",
         "Читаю плейлист…": "Reading the playlist…",
         "Нужен вход или плейлиста не существует": "Sign-in needed, or the playlist doesn’t exist",
         "В очередь добавлено видео: %d": "Videos added to the queue: %d",
-        "В очередь добавлено видео: %d (первые 200)": "Videos added to the queue: %d (first 200)",
         "Плейлист": "Playlist",
         "Загрузок идёт: %d · в очереди: %d · готово: %d": "Downloading: %d · in the queue: %d · done: %d",
         "Открыть очередь": "Open the queue",
@@ -414,8 +464,8 @@ enum Translations {
         "Мужской": "Male",
         "Нужен вход в аккаунт": "Login required",
         "Ошибка": "Error",
-        "Это видео требует входа в аккаунт. Чтобы взять cookies из браузера, приложению нужен доступ к диску. Нажми «Открыть настройки» — в списке приложений найди Scorpena и включи «Полный доступ к диску» (если Scorpena там нет — добавь её кнопкой «+»). Перезапусти приложение и повтори.":
-            "This video requires being logged in. To grab cookies from your browser, the app needs disk access. Click “Open Settings” — find Scorpena in the list of apps and turn on “Full Disk Access” (if Scorpena isn't there, add it with the “+” button). Restart the app and try again.",
+        "Это видео требует входа в аккаунт. Чтобы взять cookies из браузера, приложению нужен доступ к диску. Нажми «Открыть настройки»: в списке приложений найди Scorpena и включи «Полный доступ к диску» (если Scorpena там нет, добавь её кнопкой «+»). Перезапусти приложение и повтори.":
+            "This video requires being logged in. To grab cookies from your browser, the app needs disk access. Click “Open Settings”: find Scorpena in the list of apps and turn on “Full Disk Access” (if Scorpena isn't there, add it with the “+” button). Restart the app and try again.",
         "Для скачивания требуется вход в аккаунт:\n\nСайт отдаёт это видео только при входе в аккаунт. Войди на сайт в браузере и повтори. Например, Vimeo сейчас требует вход почти для всех роликов, даже открытых.":
             "Logging in is required to download this:\n\nThe site only serves this video to logged-in accounts. Log in to the site in your browser and try again. For example, Vimeo now requires login for almost all videos, even public ones.",
         "Что-то пошло не так. Попробуй ещё раз или сообщи об ошибке. А пока попробуй другую ссылку.":
@@ -423,13 +473,12 @@ enum Translations {
         "%d с": "%d s",
         "%d мин %d с": "%d min %d s",
         "Готово ✅": "Done ✅",
-        "Проверка кодека…": "Checking codec…",
-        "Готово ✅ (кодек не H.264 — ffmpeg недоступен)": "Done ✅ (codec isn't H.264 — ffmpeg unavailable)",
-        "Перекодирование в H.264…": "Transcoding to H.264…",
+        "Готово ✅ (кодек не H.264, ffmpeg недоступен)":
+            "Done ✅ (codec isn't H.264, ffmpeg unavailable)",
         "Не удалось перекодировать.": "Couldn't transcode.",
         "Готово ✅ (перекодировано в H.264)": "Done ✅ (transcoded to H.264)",
         "Готово ✅ (H.264-копию сохранить не удалось, файл в исходном кодеке)":
-            "Done ✅ (couldn't save the H.264 copy — file kept in its original codec)",
+            "Done ✅ (couldn't save the H.264 copy, file kept in its original codec)",
         "Видео скачано (%@), но перекодировать в H.264 не удалось. Файл остался в исходном кодеке.":
             "Video downloaded (%@), but transcoding to H.264 failed. The file was kept in its original codec.",
         "Скачано, но не в H.264": "Downloaded, but not H.264",
@@ -437,14 +486,13 @@ enum Translations {
             "Video unavailable (removed, private, or blocked in your region).",
         "Ссылка не распознана или сайт не поддерживается. Нужен прямой адрес страницы видео (YouTube, VK и т.д.).":
             "Link not recognized or the site isn't supported. A direct video page URL is needed (YouTube, VK, etc.).",
-        "Не нашёлся формат под выбранное качество — попробуй «Максимальное».":
-            "No format found for the selected quality — try “Best”.",
+        "Не нашёлся формат под выбранное качество. Попробуй «Максимальное».":
+            "No format found for the selected quality. Try “Best”.",
         "YouTube отклонил загрузку (403). Открой «Дополнительно» → «Проверить сейчас», затем повтори. Или попробуй другую ссылку.":
             "YouTube rejected the download (403). Open “Advanced” → “Check now”, then try again. Or try a different link.",
         "Не получилось связаться с сайтом. Если включён VPN, попробуй его выключить.": "Couldn't reach the site. If a VPN is on, try turning it off.",
         "Вырезать фрагмент": "Cut a clip",
-        "Открыть": "Open",
-        "Вставь ссылку — ролик откроется здесь": "Paste a link — the video will open here",
+        "Вставь ссылку и ролик откроется здесь": "Paste a link and the video will open here",
         "Готовлю просмотр…": "Getting the preview ready…",
         "Готовлю просмотр… %d%%": "Getting the preview ready… %d%%",
         "Не получилось открыть ролик для просмотра.": "Couldn't open the video for preview.",
@@ -455,46 +503,35 @@ enum Translations {
         "Конец здесь": "End here",
         "Посмотреть фрагмент": "Preview the clip",
         "Скачать фрагмент": "Download the clip",
-        "Конец должен быть позже начала": "The end must be after the start",
         "Сейчас %@ из %@": "Now %@ of %@",
         "Фрагмент:": "Clip:",
         "весь ролик:": "whole video:",
         "фрагмент": "clip",
-        "Фрагмент добавлен в загрузки": "Clip added to downloads",
+        "Фрагмент добавлен в загрузки. Выбери ещё один или закрой окно": "Clip added to downloads. Pick another or close the window",
         "ГБ": "GB",
         "МБ": "MB",
         "КБ": "KB",
-        "Открывать папку после загрузки": "Open the folder when the download finishes",
-        "Одно видео — сразу. Плейлист или очередь — когда скачается всё.": "One video — right away. A playlist or several in the queue — when all of them are done.",
+        "Открывать папку после загрузки": "Open the folder after the download",
+        "Сразу, если одно видео. Когда скачается всё, если плейлист или очередь.": "Right away if it is one video. When everything has downloaded if it is a playlist or a queue.",
         "Файл не найден": "File not found",
         "из": "of",
-        "Проверяю доступные качества…": "Checking available qualities…",
-        "Доступно: ": "Available: ",
-        "Не удалось определить качества — при скачивании возьмётся максимум доступное.": "Couldn't determine the qualities — the best available will be used when downloading.",
-        "Завершаю…": "Finishing up…",
-        "Завершаю… %d%%": "Finishing up… %d%%",
+        "Конвертирую в %@…": "Converting to %@…",
+        "Склеиваю видео и звук…": "Joining video and sound…",
+        "Перекодирую видео…": "Re-encoding the video…",
+        "Перекодирую видео… %d%%": "Re-encoding the video… %d%%",
+        "Сохраняю файл…": "Saving the file…",
         "При поддержке Александра Семёнова (opragopa)": "With support from Alexander Semenov (opragopa)",
-        "Тема: светлая": "Theme: light",
-        "Тема: тёмная": "Theme: dark",
-        "Тема: как в системе": "Theme: like the system",
-        "%.1f МБ": "%.1f MB",
-        "%.0f КБ": "%.0f KB",
         "Очистить записи за %@?": "Clear entries for %@?",
         "Записи за %@ будут удалены из списка. Скачанные файлы не затрагиваются.": "Entries for %@ will be removed from the list. Your downloaded files are not touched.",
         "Очистить записи за %@": "Clear entries for %@",
         "Добавить в очередь": "Add to queue",
         "Добавлено в очередь": "Added to the queue",
-        "Плейлисты добавляются из главного окна.": "Playlists are added from the main window.",
-        "Файл уже скачан": "File already downloaded",
         "Ты уже скачивал это видео с такими же настройками. Файл лежит в папке.": "You've already downloaded this video with the same settings. The file is in the folder.",
         "Скачать ещё раз": "Download again",
-        "Показать в папке": "Show in folder",
         "МБ/с": "MB/s",
         "КБ/с": "KB/s",
         "Удалить из истории": "Remove from history",
 
         // MARK: formatBytes
-        "%.2f ГБ": "%.2f GB",
-        "%.0f МБ": "%.0f MB",
     ]
 }

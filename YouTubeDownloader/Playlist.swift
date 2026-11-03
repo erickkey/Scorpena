@@ -135,3 +135,92 @@ private struct PlaylistQuestionView: View {
         }
     }
 }
+
+// MARK: - The playlist flow, the same in every window
+
+/// A link with a playlist in it: read the playlist first (so the question can say how many videos
+/// it has), ask — the whole playlist or just the one video? — and put the videos into the queue,
+/// in a folder of their own. The main window and the queue window both run exactly this.
+enum PlaylistFlow {
+    struct Hooks {
+        /// A line for the status under the link field (nil clears it); `isError` for a problem.
+        var status: (String?, _ isError: Bool) -> Void
+        /// The playlist can't be read because of a sign-in / missing disk access.
+        var unreadable: () -> Void = {}
+        /// «Только это видео».
+        var single: () -> Void
+        /// Videos went to the queue.
+        var added: () -> Void
+    }
+
+    private static var reading = false
+
+    static func start(_ list: PlaylistLink, ytDlp: String?, audioOnly: Bool, stripAudio: Bool,
+                      destination: URL, hooks: Hooks) {
+        guard let ytDlp, !reading else { return }
+        reading = true
+        hooks.status(tr("Читаю плейлист…"), false)
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = PlaylistLink.fetch(listURL: list.listURL, ytDlp: ytDlp)
+            DispatchQueue.main.async {
+                reading = false
+                hooks.status(nil, false)
+                if result == nil {
+                    hooks.status(tr("Нужен вход или плейлиста не существует"), true)
+                    hooks.unreadable()
+                }
+                guard result != nil || list.hasVideo else { return }
+                ask(list, result: result, audioOnly: audioOnly, stripAudio: stripAudio, destination: destination, hooks: hooks)
+            }
+        }
+    }
+
+    private static func ask(_ list: PlaylistLink,
+                            result: (title: String?, entries: [PlaylistLink.Entry], total: Int)?,
+                            audioOnly: Bool, stripAudio: Bool, destination: URL, hooks: Hooks) {
+        var text: String
+        switch (result, list.hasVideo) {
+        case let (result?, true):
+            text = trf("В плейлисте %d видео. Скачать весь плейлист или только это видео?", result.total)
+        case let (result?, false):
+            text = trf("В плейлисте %d видео. Скачать их все? Они встанут в очередь загрузок.", result.total)
+        default:
+            text = tr("Скачать весь плейлист или только это видео?")
+        }
+        if let result, result.total > result.entries.count {
+            text += "\n\n" + trf("За один раз добавятся первые %d.", result.entries.count)
+        }
+        PlaylistQuestionPanel.shared.ask(message: text, canTakeWhole: result != nil, canTakeSingle: list.hasVideo) { choice in
+            switch choice {
+            case .whole:
+                if let result {
+                    enqueue(result, list: list, audioOnly: audioOnly, stripAudio: stripAudio, destination: destination)
+                    hooks.status(trf("В очередь добавлено видео: %d", result.entries.count), false)
+                    hooks.added()
+                }
+            case .single:
+                hooks.single()
+            case .cancel:
+                break
+            }
+        }
+    }
+
+    /// Puts every video of the playlist into the queue, in its own folder.
+    private static func enqueue(_ result: (title: String?, entries: [PlaylistLink.Entry], total: Int), list: PlaylistLink,
+                                audioOnly: Bool, stripAudio: Bool, destination: URL) {
+        let folder = destination.appendingPathComponent(PlaylistLink.folderName(for: result.title), isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let playlist = PlaylistInfo(id: UUID(), title: result.title, listURL: list.listURL,
+                                    thumbnail: result.entries.first.flatMap { PlaylistLink.thumbnail(forVideoURL: $0.url) },
+                                    folder: folder)
+        DownloadQueue.shared.submit(result.entries.map { entry in
+            QueuedDownload(url: entry.url, destination: folder, maxHeight: nil,
+                           audioOnly: audioOnly, stripAudio: stripAudio,
+                           videoFormat: .current, audioFormat: .current,
+                           knownTitle: entry.title,
+                           thumbnail: PlaylistLink.thumbnail(forVideoURL: entry.url),
+                           playlist: playlist)
+        })
+    }
+}

@@ -50,8 +50,6 @@ enum AudioFormat: String, CaseIterable, Identifiable {
     /// "Готово ✅ (MP3)" — just the format, no extras.
     var resultName: String { title }
 
-    var convertingStatus: String { trf("Конвертация в %@…", title) }
-
     var fileExtensions: Set<String> {
         switch self {
         case .mp3: return ["mp3"]
@@ -223,7 +221,7 @@ enum ChimeVoice: String, CaseIterable, Identifiable {
 
     /// Russian recordings in the Russian interface, English ones in the English one.
     var resourceName: String {
-        let suffix = LanguageSettings.shared.language == .en ? "EN" : ""
+        let suffix = LanguageSettings.shared.language.voiceSuffix
         switch self {
         case .female: return "DownloadComplete" + suffix
         case .male:   return "DownloadCompleteMale" + suffix

@@ -8,6 +8,7 @@ struct PlaylistInfo {
     let title: String?
     let listURL: String
     let thumbnail: URL?
+    var folder: URL? = nil
 }
 
 /// One link waiting for its turn, with the choices made when it was added.
@@ -26,6 +27,8 @@ struct QueuedDownload: Identifiable {
     var playlist: PlaylistInfo? = nil
     /// Set when only a part of the video is wanted.
     var section: ClipSection? = nil
+    /// The size told by the quality check, when there was one: the bar shows the final size from the start.
+    var expectedBytes: Int64? = nil
 
     var title: String { URL(string: url)?.host ?? url }
     var formatLabel: String { audioOnly ? audioFormat.title : videoFormat.title }
@@ -95,10 +98,13 @@ final class DownloadQueue: ObservableObject {
     /// Called when nothing is running or waiting any more: shows what came down, if the setting is on.
     private func revealIfAllDone() {
         guard busyCount == 0, items.isEmpty else { return }
-        let files = finishedFiles
+        let files = finishedFiles.filter { FileManager.default.fileExists(atPath: $0.path) }
         finishedFiles = []
         guard UserDefaults.standard.bool(forKey: Self.openFolderKey), !files.isEmpty else { return }
-        if files.count <= 20 {
+        // One playlist, nothing else: open its folder rather than selecting the folder in its parent.
+        if files.count == 1, (try? files[0].resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+            NSWorkspace.shared.open(files[0])
+        } else if files.count <= 20 {
             NSWorkspace.shared.activateFileViewerSelecting(files)
         } else if let folder = files.last?.deletingLastPathComponent() {
             NSWorkspace.shared.open(folder)
@@ -208,11 +214,13 @@ final class DownloadQueue: ObservableObject {
     }
 
     /// The same link, as video or as audio, that is already downloading or waiting.
-    /// Two of those at once would fight over the same partial files.
-    func isActive(url: String, audioOnly: Bool) -> Bool {
+    /// Two of those at once would fight over the same partial files. Different parts (clips)
+    /// of one video are different downloads: any number of them can wait together.
+    func isActive(url: String, audioOnly: Bool, section: ClipSection? = nil) -> Bool {
         let wanted = url.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         func same(_ item: QueuedDownload) -> Bool {
-            item.audioOnly == audioOnly && item.url.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == wanted
+            item.audioOnly == audioOnly && item.section == section
+                && item.url.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == wanted
         }
         return items.contains(where: same) || running.contains { same($0.item) }
     }
@@ -239,7 +247,7 @@ final class DownloadQueue: ObservableObject {
     }
 
     func submit(_ newItems: [QueuedDownload]) {
-        let newItems = newItems.filter { !isActive(url: $0.url, audioOnly: $0.audioOnly) }
+        let newItems = newItems.filter { !isActive(url: $0.url, audioOnly: $0.audioOnly, section: $0.section) }
         guard !newItems.isEmpty else { return }
         if busyCount == 0 && items.isEmpty {
             batchTotal = 0
@@ -253,6 +261,7 @@ final class DownloadQueue: ObservableObject {
         for item in newItems {
             if let title = item.knownTitle {
                 previews[item.id] = LinkPreview(title: title, image: nil)   // the picture loads when its card comes into view
+                if item.thumbnail == nil { fetchPreview(for: item) }        // a clip: the title is known, the cover is not
             } else {
                 fetchPreview(for: item)
             }
@@ -314,7 +323,7 @@ final class DownloadQueue: ObservableObject {
                 }
             }
             guard !lines.isEmpty else { return }
-            let title = lines.first.flatMap { $0.isEmpty || $0 == "NA" ? nil : $0 }
+            let title = item.knownTitle ?? lines.first.flatMap { $0.isEmpty || $0 == "NA" ? nil : $0 }
             DispatchQueue.main.async { self?.previews[item.id] = LinkPreview(title: title, image: nil) }
             guard lines.count > 1, let address = URL(string: lines[1]), address.scheme?.hasPrefix("http") == true else { return }
             var request = URLRequest(url: address)
@@ -342,7 +351,7 @@ final class DownloadQueue: ObservableObject {
         playlistSucceeded[id] = nil
         if succeeded > 0 {
             DownloadHistory.shared.recordPlaylist(url: info.listURL, title: info.title,
-                                                  count: succeeded, thumbnail: info.thumbnail)
+                                                  count: succeeded, thumbnail: info.thumbnail, folder: info.folder)
         }
     }
 
@@ -427,6 +436,7 @@ final class DownloadQueue: ObservableObject {
                           stripAudio: item.stripAudio,
                           videoFormat: item.videoFormat,
                           audioFormat: item.audioFormat,
+                          expectedBytes: item.expectedBytes,
                           section: item.section)
         }
     }
@@ -491,7 +501,10 @@ final class DownloadQueue: ObservableObject {
                 if let playlist = job.item.playlist {
                     self.finishPlaylistIfDone(playlist.id)
                 }
-                if succeeded, let file = manager?.lastDownloadedFile { self.finishedFiles.append(file) }
+                if succeeded, let file = manager?.lastDownloadedFile {
+                    let shown = job.item.playlist != nil ? job.item.destination : file
+                    if !self.finishedFiles.contains(shown) { self.finishedFiles.append(shown) }
+                }
                 let preview = self.previews[job.item.id]
                 self.finished.insert(
                     FinishedDownload(title: preview?.title ?? job.item.title,
@@ -524,8 +537,6 @@ final class DownloadsTabState: ObservableObject {
 final class DownloadsPanel {
     static let shared = DownloadsPanel()
     private var window: NSWindow?
-    private var activationObserver: NSObjectProtocol?
-    private var clipboardAtOpen = 0
     private let tabState = DownloadsTabState()
 
     /// `tab: nil` picks the queue when something is going on, the history otherwise.
@@ -558,19 +569,6 @@ final class DownloadsPanel {
         win.centerExactlyOnScreen()
         win.makeKeyAndOrderFront(nil)
         window = win
-
-        // Copying a new link means the next move is «Скачать» in the main window,
-        // which this window would be covering — so it steps aside.
-        clipboardAtOpen = NSPasteboard.general.changeCount
-        if let activationObserver { NotificationCenter.default.removeObserver(activationObserver) }
-        activationObserver = NotificationCenter.default.addObserver(
-            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            guard let self, let window = self.window, window.isVisible,
-                  NSPasteboard.general.changeCount != self.clipboardAtOpen else { return }
-            window.close()
-            NSApp.windows.first { $0 !== window && $0.isVisible && $0.canBecomeMain }?.makeKeyAndOrderFront(nil)
-        }
     }
 }
 
@@ -609,6 +607,8 @@ struct DownloadsView: View {
 private struct QueueAdder: View {
     @State private var link = ""
     @State private var note: String?
+    @State private var noteIsError = false
+    @State private var qualityCheckWork: DispatchWorkItem?
     @StateObject private var prober = DownloadManager()      // checks the quality of the typed link
     @AppStorage(VideoFormat.key) private var videoFormat = VideoFormat.mp4.rawValue
     @AppStorage(AudioFormat.key) private var audioFormat = AudioFormat.mp3.rawValue
@@ -631,7 +631,10 @@ private struct QueueAdder: View {
                     .lineLimit(1)
                     .disableAutocorrection(true)
                     .onSubmit { add() }
-                    .onChange(of: link) { _ in prober.resetProbe() }
+                    .onChange(of: link) { _ in
+                        prober.resetProbe()
+                        scheduleQualityCheck()
+                    }
                 Button { add() } label: { Text(tr("Добавить в очередь")).lineLimit(1) }
                     .buttonStyle(PrimaryPillStyle())
                     .disabled(!usable)
@@ -641,6 +644,17 @@ private struct QueueAdder: View {
             .padding(.vertical, 6)
             .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .textBackgroundColor)))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color(nsColor: .separatorColor)))
+
+            // The same line as under the main window's field (blank when there is nothing to say).
+            let hint = ContentView.linkHint(link)
+            HStack(spacing: 10) {
+                Text(hint?.text ?? " ").foregroundStyle(hint?.color ?? .secondary).opacity(hint == nil ? 0 : 1)
+                Text(prober.probedTitle.map { "▸ \($0)" } ?? " ")
+                    .foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
+                    .opacity(prober.probedTitle == nil ? 0 : 1)
+                Spacer(minLength: 0)
+            }
+            .font(.caption)
 
             HStack(spacing: 20) {
                 FormatSegments(title: tr("Видео"),
@@ -659,34 +673,57 @@ private struct QueueAdder: View {
 
             // Like the main window: no sound · quality — one quiet line.
             HStack(spacing: 8) {
-                Toggle(tr("без звука"), isOn: $videoNoAudio)
-                    .toggleStyle(.checkbox)
-                    .disabled(downloadMode == "audio")
-                Text("·")
-                QualityPicker(manager: prober, link: link, height: $qualityHeight)
+                if downloadMode != "audio" {
+                    Toggle(tr("без звука"), isOn: $videoNoAudio)
+                        .toggleStyle(.checkbox)
+                    Text("·")
+                    QualityPicker(manager: prober, link: link, height: $qualityHeight)
+                }
             }
+            .frame(minHeight: 20)
             .font(.caption)
             .foregroundStyle(.secondary)
 
             Text(note ?? " ")
                 .font(.caption)
-                .foregroundStyle(.green)
+                .foregroundStyle(noteIsError ? .red : .green)
         }
+    }
+
+    /// Like the main window: the qualities are looked up by themselves a moment after the link is pasted.
+    private func scheduleQualityCheck() {
+        qualityCheckWork?.cancel()
+        guard ContentView.isCheckable(link) else { return }
+        let work = DispatchWorkItem {
+            guard ContentView.isCheckable(link), prober.availableHeights.isEmpty, !prober.isProbing else { return }
+            prober.probeQuality(urlString: link)
+        }
+        qualityCheckWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: work)
     }
 
     private func add() {
         let url = link.trimmingCharacters(in: .whitespacesAndNewlines)
         guard ContentView.isPlausibleURLString(url) else { return }
-        if PlaylistLink.detect(url) != nil {
-            show(tr("Плейлисты добавляются из главного окна."))
+        let audioOnly = downloadMode == "audio"
+        if let list = PlaylistLink.detect(url) {
+            PlaylistFlow.start(list, ytDlp: prober.ytDlpPath, audioOnly: audioOnly, stripAudio: videoNoAudio && !audioOnly,
+                               destination: URL(fileURLWithPath: destinationPath),
+                               hooks: .init(status: { text, isError in if let text { show(text, isError: isError) } else { note = nil } },
+                                            single: { addSingle(url, audioOnly: audioOnly) },
+                                            added: { link = "" }))
             return
         }
-        let audioOnly = downloadMode == "audio"
+        addSingle(url, audioOnly: audioOnly)
+    }
+
+    private func addSingle(_ url: String, audioOnly: Bool) {
         // Before a check the picker only says «Максимально доступное» — honour that, like the main window.
         let height = prober.availableHeights.isEmpty ? nil : (qualityHeight == 0 ? nil : qualityHeight)
         let item = QueuedDownload(url: url, destination: URL(fileURLWithPath: destinationPath), maxHeight: height,
                                   audioOnly: audioOnly, stripAudio: videoNoAudio && !audioOnly,
-                                  videoFormat: .current, audioFormat: .current)
+                                  videoFormat: .current, audioFormat: .current,
+                                  expectedBytes: prober.expectedSize(height: height, audioOnly: audioOnly))
         if DownloadQueue.shared.isActive(url: url, audioOnly: audioOnly) {
             show(tr("Эта ссылка уже скачивается или стоит в очереди"))
             return
@@ -697,9 +734,10 @@ private struct QueueAdder: View {
         }
     }
 
-    private func show(_ text: String) {
+    private func show(_ text: String, isError: Bool = false) {
         note = text
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { if note == text { note = nil } }
+        noteIsError = isError
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6) { if note == text { note = nil } }
     }
 }
 
@@ -803,12 +841,20 @@ struct QueueView: View {
                      image: item.image,
                      progress: item.succeeded ? 1 : nil,
                      statusIcon: item.succeeded ? "checkmark.circle.fill" : "xmark.circle",
-                     status: missingFile == item.id ? tr("Файл не найден") : item.note) {
+                     status: item.note) {
             if let file = item.fileURL {
-                CardButton(title: tr("Показать файл")) {
-                    if !FileReveal.show(file) {
-                        missingFile = item.id
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { if missingFile == item.id { missingFile = nil } }
+                if missingFile == item.id {
+                    // Red on a light pill: readable on top of any cover picture.
+                    Text(FileReveal.missingText(folder: false))
+                        .font(.caption.weight(.semibold)).foregroundStyle(.red).lineLimit(1).fixedSize()
+                        .padding(.horizontal, 10).padding(.vertical, 5)
+                        .background(Capsule().fill(Color.white.opacity(0.92)))
+                } else {
+                    CardButton(title: FileReveal.buttonTitle(folder: false)) {
+                        if !FileReveal.show(file) {
+                            missingFile = item.id
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { if missingFile == item.id { missingFile = nil } }
+                        }
                     }
                 }
             }
@@ -837,10 +883,10 @@ private struct RunningCard: View {
                          creeping: manager.isRunning && !manager.isPaused,
                          startedAt: manager.isRunning && !manager.isPaused ? manager.downloadStartTime : nil,
                          statusIcon: manager.isPaused ? "pause.circle" : "arrow.down.circle",
-                         status: manager.isPaused ? tr("Пауза — нажми «Продолжить»") : manager.statusLine) {
+                         status: manager.isPaused ? tr("Пауза: нажми «Продолжить»") : manager.statusLine) {
                 if manager.isPaused {
                     CardButton(title: tr("Продолжить")) { manager.resume() }
-                } else {
+                } else if manager.pausable {
                     CardButton(title: tr("Пауза")) { manager.pause() }
                         .disabled(!manager.canPause)
                 }
@@ -1009,7 +1055,7 @@ private struct AlreadyDownloadedView: View {
                 .multilineTextAlignment(.center)
         }, buttons: {
             DialogButton(title: tr("Скачать ещё раз")) { onChoose(.again) }
-            DialogButton(title: tr("Показать в папке"), primary: true) { onChoose(.show) }
+            DialogButton(title: tr("Показать файл"), primary: true) { onChoose(.show) }
         })
     }
 }

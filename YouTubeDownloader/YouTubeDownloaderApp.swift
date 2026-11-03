@@ -25,6 +25,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ToolAutoUpdater.recoverInterruptedSwap()
         DiagnosticReporter.reportPreviousCrashIfAny()
         DispatchQueue.main.asyncAfter(deadline: .now() + 25) { DiagnosticReporter.checkBundledTools() }
+        installEscapeToClose()
+    }
+
+    private var escapeMonitor: Any?
+
+    /// Esc closes every window the app opens by itself (downloads, clip, settings, questions…) —
+    /// but not the main window (a SwiftUI window of its own class), not windows without a close
+    /// button (the language choice must be answered), and not while text is being composed.
+    /// Question windows treat closing as their «cancel», so nothing is left hanging.
+    private func installEscapeToClose() {
+        escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.keyCode == 53,
+                  let window = event.window ?? NSApp.keyWindow,
+                  type(of: window) == NSWindow.self,
+                  window.styleMask.contains(.closable),
+                  NSApp.modalWindow == nil else { return event }
+            if let text = window.firstResponder as? NSTextView, text.hasMarkedText() { return event }
+            window.performClose(nil)
+            return nil
+        }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

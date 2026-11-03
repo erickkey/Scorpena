@@ -178,7 +178,7 @@ private struct UpdatePanelView: View {
         case .finished:
             return ""
         case .rolledBack:
-            return tr("Новая версия не запустилась, поэтому вернули прежнюю. Ничего не сломалось — можно скачать новую вручную.")
+            return tr("Новая версия не запустилась, поэтому вернули прежнюю. Ничего не сломалось, можно скачать новую вручную.")
         case .failed(let reason):
             return reason + "\n" + tr("Ничего не сломалось: осталась прежняя версия.")
         case .renamed(let canRename):
