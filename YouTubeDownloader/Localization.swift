@@ -128,6 +128,7 @@ enum Translations {
         "перемотка на 5 секунд": "skip 5 seconds",
         "точная перемотка на 1 секунду": "precise skip of 1 second",
         "покадровая перемотка": "frame by frame",
+        "отметить начало и конец отрезка": "mark the start and end of the clip",
         "быстрый переход по видео (5 это середина)": "quick jump through the video (5 is the middle)",
         "Клавиши": "Keys",
         "Не удалось продолжить загрузку. Проверь ссылку или добавь её заново.": "Couldn't continue the download. Check the link or add it again.",

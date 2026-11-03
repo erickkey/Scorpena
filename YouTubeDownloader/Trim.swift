@@ -60,6 +60,8 @@ final class TrimPanel {
             case 124: model.nudge(by: shift ? 1 : 5)                      // →
             case 43: model.stepFrame(-1)                                  // ,
             case 47: model.stepFrame(1)                                   // .
+            case 34: model.markStartHere()                                // I — the start mark
+            case 31: model.markEndHere()                                  // O — the end mark
             default:
                 guard let tenth = digits[event.keyCode] else { return event }
                 model.jump(toTenth: tenth)
@@ -1011,6 +1013,7 @@ struct KeysHint: View {
         ([.text("←"), .text("→")], "перемотка на 5 секунд"),
         ([.text("⇧"), .text("←"), .text("→")], "точная перемотка на 1 секунду"),
         ([.text(","), .text(".")], "покадровая перемотка"),
+        ([.text("I"), .text("O")], "отметить начало и конец отрезка"),
         ([.text("0–9")], "быстрый переход по видео (5 это середина)"),
     ]
 
