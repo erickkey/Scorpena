@@ -123,12 +123,12 @@ func trf(_ russianFormat: String, _ args: CVarArg...) -> String {
 
 enum Translations {
     static let en: [String: String] = [
+        "пауза и воспроизведение": "pause and play",
+        "перемотка на 5 секунд": "skip 5 seconds",
+        "точная перемотка на 1 секунду": "precise skip of 1 second",
+        "покадровая перемотка": "frame by frame",
+        "быстрый переход по видео (5 это середина)": "quick jump through the video (5 is the middle)",
         "Клавиши": "Keys",
-        "**Пробел:** пауза и воспроизведение": "**Space:** pause and play",
-        "**← →:** перемотка на 5 секунд": "**← →:** skip 5 seconds",
-        "**Shift + ← →:** точная перемотка на 1 секунду": "**Shift + ← →:** precise skip of 1 second",
-        "**, .:** покадровая перемотка": "**, .:** frame by frame",
-        "**0–9:** быстрый переход по видео (5 это середина)": "**0–9:** quick jump through the video (5 is the middle)",
         "Не удалось продолжить загрузку. Проверь ссылку или добавь её заново.": "Couldn't continue the download. Check the link or add it again.",
         "Ножницы: вырезание нужного куска видео, ввод времени вручную, навигация клавишами": "Scissors: cutting out the part of a video you need, typing the times in by hand, keyboard navigation",
         "Светлая и тёмная тема": "Light and dark theme",

@@ -51,7 +51,8 @@ final class TrimPanel {
                   !event.modifierFlags.contains(.command), !event.modifierFlags.contains(.control) else { return event }
             let shift = event.modifierFlags.contains(.shift)
             // The key codes do not depend on the keyboard layout.
-            let digits: [UInt16: Int] = [29: 0, 18: 1, 19: 2, 20: 3, 21: 4, 23: 5, 22: 6, 26: 7, 28: 8, 25: 9]
+            let digits: [UInt16: Int] = [29: 0, 18: 1, 19: 2, 20: 3, 21: 4, 23: 5, 22: 6, 26: 7, 28: 8, 25: 9,
+                                         82: 0, 83: 1, 84: 2, 85: 3, 86: 4, 87: 5, 88: 6, 89: 7, 91: 8, 92: 9]    // the keypad too
             switch event.keyCode {
             case 49: model.togglePlay()                                   // Space
             case 123: model.nudge(by: shift ? -1 : -5)                    // ←
@@ -961,37 +962,48 @@ struct QualityPicker: View {
 // MARK: - The keys of the clip window
 
 /// A small keyboard in the corner of the video: with the pointer over it, the list of keys opens on a
-/// see-through panel; with the pointer gone, it folds back.
-private struct KeysHint: View {
-    @State private var open = false
+/// see-through panel; with the pointer gone, it folds back. The keys are drawn as little keys (the same in
+/// every language and keyboard layout), the explanations are small text beside them.
+struct KeysHint: View {
+    @State private var open: Bool
     @ObservedObject private var languageSettings = LanguageSettings.shared
 
-    private static let rows = [
-        "**Пробел:** пауза и воспроизведение",
-        "**← →:** перемотка на 5 секунд",
-        "**Shift + ← →:** точная перемотка на 1 секунду",
-        "**, .:** покадровая перемотка",
-        "**0–9:** быстрый переход по видео (5 это середина)",
+    init(startOpen: Bool = false) { _open = State(initialValue: startOpen) }
+
+    private enum Cap { case space, text(String) }
+
+    private static let rows: [(keys: [Cap], text: String)] = [
+        ([.space], "пауза и воспроизведение"),
+        ([.text("←"), .text("→")], "перемотка на 5 секунд"),
+        ([.text("⇧"), .text("←"), .text("→")], "точная перемотка на 1 секунду"),
+        ([.text(","), .text(".")], "покадровая перемотка"),
+        ([.text("0–9")], "быстрый переход по видео (5 это середина)"),
     ]
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             if open {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(tr("Клавиши")).font(.callout.weight(.semibold))
-                    ForEach(Self.rows, id: \.self) { row in
-                        boldMarkdown(tr(row)).font(.caption)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(tr("Клавиши")).font(.caption.weight(.semibold))
+                    ForEach(Array(Self.rows.enumerated()), id: \.offset) { _, row in
+                        HStack(spacing: 8) {
+                            HStack(spacing: 3) {
+                                ForEach(Array(row.keys.enumerated()), id: \.offset) { _, cap in keycap(cap) }
+                            }
+                            .frame(width: 92, alignment: .leading)
+                            Text(tr(row.text)).font(.system(size: 10))
+                        }
                     }
                 }
                 .foregroundStyle(.white)
-                .padding(12)
-                .background(RoundedRectangle(cornerRadius: 10).fill(Color.black.opacity(0.62)))
+                .padding(9)
+                .background(RoundedRectangle(cornerRadius: 9).fill(Color.black.opacity(0.62)))
                 .transition(.opacity)
             } else {
                 Image(systemName: "keyboard")
-                    .font(.system(size: 15))
+                    .font(.system(size: 14))
                     .foregroundStyle(.white.opacity(0.75))
-                    .padding(7)
+                    .padding(6)
                     .background(Circle().fill(Color.black.opacity(0.4)))
                     .transition(.opacity)
             }
@@ -1000,5 +1012,19 @@ private struct KeysHint: View {
         .contentShape(Rectangle())
         .onHover { open = $0 }
         .animation(.easeOut(duration: 0.15), value: open)
+    }
+
+    @ViewBuilder
+    private func keycap(_ cap: Cap) -> some View {
+        Group {
+            switch cap {
+            case .space: Image(systemName: "space").font(.system(size: 10, weight: .medium)).frame(width: 34)
+            case .text(let symbol): Text(symbol).font(.system(size: 10, weight: .medium, design: .rounded)).frame(minWidth: 12)
+            }
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 2)
+        .background(RoundedRectangle(cornerRadius: 4).fill(Color.white.opacity(0.16)))
+        .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.white.opacity(0.35), lineWidth: 0.5))
     }
 }
