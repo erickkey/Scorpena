@@ -22,8 +22,6 @@ final class TrimPanel {
     private var closeObserver: NSObjectProtocol?
     private var keyMonitor: Any?
     private var clickMonitor: Any?
-    private var typingObserver: NSObjectProtocol?
-    private var releaseWork: DispatchWorkItem?
 
     func show(manager: DownloadManager) {
         NSApp.activate(ignoringOtherApps: true)
@@ -81,26 +79,9 @@ final class TrimPanel {
             win.makeFirstResponder(nil)
             return event
         }
-        // Two seconds after the link was pasted or changed the cursor leaves the link field by itself,
-        // so the keys work again. (The time fields only have digits, so they are not touched.)
-        typingObserver = NotificationCenter.default.addObserver(
-            forName: NSText.didChangeNotification, object: nil, queue: .main
-        ) { [weak self, weak win] note in
-            guard let self, let win, let text = note.object as? NSTextView, text === win.firstResponder,
-                  text.string.contains(where: { $0.isLetter }) else { return }
-            self.releaseWork?.cancel()
-            let work = DispatchWorkItem { [weak win] in
-                if let win, win.firstResponder is NSTextView { win.makeFirstResponder(nil) }
-            }
-            self.releaseWork = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: work)
-        }
         closeObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification, object: win, queue: .main
         ) { [weak self] _ in
-            self?.releaseWork?.cancel()
-            if let o = self?.typingObserver { NotificationCenter.default.removeObserver(o) }
-            self?.typingObserver = nil
             if let monitor = self?.keyMonitor { NSEvent.removeMonitor(monitor) }
             self?.keyMonitor = nil
             if let monitor = self?.clickMonitor { NSEvent.removeMonitor(monitor) }
@@ -593,6 +574,7 @@ struct TrimView: View {
     var onClose: () -> Void
 
     @ObservedObject private var link = LinkField.clip
+    @FocusState private var linkFocused: Bool
     @ObservedObject private var manager: DownloadManager
     @ObservedObject private var languageSettings = LanguageSettings.shared
     @AppStorage("qualityHeight") private var qualityHeight = 0
@@ -638,6 +620,21 @@ struct TrimView: View {
         .padding(EdgeInsets(top: 20, leading: 24, bottom: 18, trailing: 24))
         .frame(width: 660, height: 724)
         .onAppear { model.linkChanged() }
+        // Once the window starts working on the video, the cursor leaves the link field, so the keys work.
+        .onChange(of: workStarted) { started in if started { linkFocused = false } }
+        // If it didn't start (say, a half-typed link), the cursor leaves by itself 2 s after the last change.
+        .task(id: link.text) {
+            guard model.linkIsUsable else { return }
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            if !Task.isCancelled { linkFocused = false }
+        }
+    }
+
+    private var workStarted: Bool {
+        switch model.phase {
+        case .preparing, .ready: return true
+        default: return false
+        }
     }
 
     // MARK: Pieces
@@ -650,7 +647,8 @@ struct TrimView: View {
                 .font(.title3)
                 .lineLimit(1)
                 .disableAutocorrection(true)
-                .onSubmit { model.load() }
+                .focused($linkFocused)
+                .onSubmit { model.load(); linkFocused = false }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
