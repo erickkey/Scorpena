@@ -10,12 +10,7 @@ it corrupts the file — that's why README warns about it).
 
 - The app was renamed **VideoDownloader → Scorpena ("Scorpena – video downloader")**;
   the GitHub repo is now `erickkey/Scorpena` (old URLs redirect).
-- **Version 3.2 was published 2026-11-03** (clip window, five languages, queue window like the main page, light/dark theme; the Windows version was removed from the repo). Older line follows. **Version 3.1.1 was the previous one (3.1 + a clearer «no internet / turn off VPN» download error; its «Что нового» is the 3.1 list with that fix first). 3.1 was published 2026-10-29:** parallel downloads with a queue
-  (`DownloadQueue.swift`, saved in `queue.json`, pauses included), playlists (`Playlist.swift`),
-  the merged «Загрузки» window (queue + history by day), cleanup reminder (`Cleanup.swift`),
-  quit warning (`QuitWarning.swift`), first-launch browser-login preflight (`CookiePreflight.swift`),
-  new logo and one shared look for all windows (`Style.swift`: pills, `DialogLayout`).
-  3.0 was published 2026-10-28. Check what is live with `gh release list --repo erickkey/Scorpena`.
+- **Version 3.2.2 was published 2026-11-04** (unplanned update: clip-window keys I/O, cursor leaves the link field, «Что нового» in the text-skill style). 3.2.1 (2026-11-03) and 3.2 (2026-11-03: clip window «Вырезать фрагмент», five languages, queue window like the main page, light/dark theme; the Windows version was removed from the repo). 3.1 (2026-10-29) brought parallel downloads with a queue (`DownloadQueue.swift`, saved in `queue.json`, pauses included), playlists (`Playlist.swift`), the merged «Загрузки» window (queue + history by day), cleanup reminder (`Cleanup.swift`), quit warning (`QuitWarning.swift`), first-launch browser-login preflight (`CookiePreflight.swift`), new logo and one shared look for all windows (`Style.swift`: pills, `DialogLayout`). 3.0 was published 2026-10-28. Check what is live with `gh release list --repo erickkey/Scorpena`.
   New `.swift` files are NOT in `YouTubeDownloader.xcodeproj` (the build is `Scripts/build-app.sh`).
 - Releases must always carry TWO DMGs: `Scorpena.dmg` and the legacy `VideoDownloader.dmg`
   (installed 2.0/2.1 apps fetch exactly that file name and look for `VideoDownloader.app`).
@@ -165,17 +160,10 @@ final wording themselves as often as not; paste their edits back into the
   has open themselves (they do sometimes inspect the built DMG in Finder
   while you're mid-session).
 
-## Unreleased work after 3.1.1 (local commits 3f060fb … 717f33b, not pushed; Windows version removed)
+## After 3.2.2
 
-Details in the memory note `project_scorpena_unreleased_state`. In short: clip window (`Trim.swift`),
-one progress bar for the whole job (`BarDriver`/`SmoothBar` in `Style.swift`), reworked queue/history
-window, «Файл уже скачан», one hand-drawn toolbar icon set (`ToolbarIcon`), `FileReveal.show` as the
-single «show the file» rule («Файл не найден» when it is gone).
+All earlier «unreleased» work (clip window, one progress bar, queue/history window, icons, `FileReveal`) is released. Test hooks live only under `#if SCORPENA_TEST` (`TestHooks.swift`, built with `SCORPENA_TEST_BUILD=1`), so they cannot reach a release build.
 
-**Before any release build:** remove every `DEV-TEST-HOOK` block (env vars `SCORPENA_TRIM_*`,
-`SCORPENA_OPEN`, `SCORPENA_OPEN_DOWNLOADS`, `SCORPENA_AUTODL`, `SCORPENA_AUTODL_AUDIO`, `SCORPENA_TEST_SPEED`,
-`SCORPENA_PROGRESS_LOG`); get the new texts approved; bump APP_VERSION so the 3.2 «Что нового» shows.
+**Names and texts:** the clip window is «Вырезать фрагмент» (never «Ножницы»). «Что нового» is written like «О программе»: noun first, bold lead words, no «ты/вы» (skills `app-features-text-style`, `yaroslav-product-approach`). Every new or changed text is shown to the user and approved BEFORE the build.
 
-**Testing rule:** a test build shares `~/Library/Application Support/VideoDownloader` (queue, history,
-partial files) with the user's real app and the user may be using it — never kill it without saying
-so, build into a new folder, and remove test entries from `history.json` afterwards.
+**Testing rule:** a test build shares `~/Library/Application Support/VideoDownloader` (queue, history, partial files) with the user's real app and the user may be using it. Never kill his copy without saying so, build into a new folder, set another bundle id for trial copies, and remove test entries from `history.json` afterwards. Tests: `sh Scripts/test.sh`, `sh Scripts/e2e.sh` (local only); CI (`.github/workflows/tests.yml`) runs tests on every push; releases stay manual.
