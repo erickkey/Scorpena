@@ -2,6 +2,8 @@ import Foundation
 
 // The tests never touch the real queue, history and caches: Scripts/test.sh gives each its own folder.
 if AppSupport.isReal { print("FAIL  run the tests with Scripts/test.sh (they need their own data folder)"); exit(1) }
+// The texts are checked in Russian whatever the language of the computer that runs the tests.
+LanguageSettings.shared.language = .ru
 var fails = 0
 func check(_ ok: Bool, _ what: String) { print(ok ? "ok   " : "FAIL ", what); if !ok { fails += 1 } }
 let model = TrimModel(manager: DownloadManager())
