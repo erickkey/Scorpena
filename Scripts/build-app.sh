@@ -27,13 +27,22 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/bin"
 
 echo "==> compiling Swift (arm64 + x86_64)"
 BUILD="$(mktemp -d)"
-for arch in arm64 x86_64; do
-    swiftc -O -parse-as-library -swift-version 5 \
+# SCORPENA_TEST_BUILD=1 adds the hooks that the end-to-end test (Scripts/e2e.sh) drives the program with;
+# a normal build does not contain them at all. SCORPENA_ARCHS="arm64" builds for one processor only.
+ARCHS="${SCORPENA_ARCHS:-arm64 x86_64}"
+EXTRA=""
+[ "${SCORPENA_TEST_BUILD:-}" = 1 ] && EXTRA="-D SCORPENA_TEST"
+for arch in $ARCHS; do
+    swiftc -O -parse-as-library -swift-version 5 $EXTRA \
         -sdk "$SDK" -target "${arch}-apple-macos${DT}" \
         "$SRC"/*.swift \
         -o "$BUILD/vd-${arch}"
 done
-lipo -create "$BUILD/vd-arm64" "$BUILD/vd-x86_64" -o "$APP/Contents/MacOS/VideoDownloader"
+if [ "$ARCHS" = "arm64 x86_64" ]; then
+    lipo -create "$BUILD/vd-arm64" "$BUILD/vd-x86_64" -o "$APP/Contents/MacOS/VideoDownloader"
+else
+    cp "$BUILD/vd-${ARCHS%% *}" "$APP/Contents/MacOS/VideoDownloader"
+fi
 rm -rf "$BUILD"
 
 echo "==> Info.plist"

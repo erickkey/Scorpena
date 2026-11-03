@@ -1,0 +1,21 @@
+name: Tests
+
+# On every push and pull request: the program is compiled and all the checks of Scripts/test.sh run
+# (logic, translations, history safety, caches). Nothing is published from here.
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      # The real file with the Telegram secrets is not in the repository: an empty stand-in is enough to compile.
+      - name: Stand-in for the secrets file
+        run: |
+          printf 'enum Secrets {\n    static let telegramBotToken = ""\n    static let telegramChatID = ""\n}\n' > YouTubeDownloader/Secrets.swift
+
+      - name: Run all checks
+        run: sh Scripts/test.sh

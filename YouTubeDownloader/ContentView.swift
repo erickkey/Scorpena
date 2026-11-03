@@ -240,6 +240,9 @@ struct ContentView: View {
             DispatchQueue.main.async {
                 runLaunchWindowSequenceWhenActive()
             }
+            #if SCORPENA_TEST
+            TestHooks.run(queue: queue, destination: destinationURL)
+            #endif
         }
         .onChange(of: appearance) { _ in applyAppearance() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
