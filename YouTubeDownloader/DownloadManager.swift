@@ -166,6 +166,8 @@ final class DownloadManager: ObservableObject {
     private let ytDlpKey = "ytDlpPath"
     private let ffmpegKey = "ffmpegPath"
 
+    /// This download was taken from the saved queue when the program started (not started just now).
+    var isRestoredRun = false
     private var languageWatcher: AnyCancellable?
 
     init() {
@@ -1325,7 +1327,9 @@ final class DownloadManager: ObservableObject {
             DiagnosticReporter.noteDownloadFailure(
                 category: "неизвестная ошибка", host: URL(string: pendingURL)?.host, log: log)
         }
-        phase = .failed(tr("Что-то пошло не так. Попробуй ещё раз или сообщи об ошибке. А пока попробуй другую ссылку."))
+        phase = .failed(isRestoredRun
+            ? tr("Не удалось продолжить загрузку. Проверь ссылку или добавь её заново.")
+            : tr("Что-то пошло не так. Попробуй ещё раз или сообщи об ошибке. А пока попробуй другую ссылку."))
         statusLine = tr("Ошибка")
     }
 
@@ -1524,8 +1528,7 @@ final class DownloadManager: ObservableObject {
     /// `.part` files, the H.264 copy) lives here, out of sight, so the chosen
     /// folder only ever gets the one finished file.
     static var partialDir: URL {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return support.appendingPathComponent("VideoDownloader/Partial", isDirectory: true)
+        AppSupport.folder.appendingPathComponent("Partial", isDirectory: true)
     }
 
     /// The staging folder of a download that ended without a finished file.

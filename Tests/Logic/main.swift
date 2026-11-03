@@ -1,4 +1,7 @@
 import Foundation
+
+// The tests never touch the real queue, history and caches: Scripts/test.sh gives each its own folder.
+if AppSupport.isReal { print("FAIL  run the tests with Scripts/test.sh (they need their own data folder)"); exit(1) }
 import SwiftUI
 
 var failures = 0

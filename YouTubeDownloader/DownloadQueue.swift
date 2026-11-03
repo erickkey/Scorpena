@@ -27,6 +27,8 @@ struct QueuedDownload: Identifiable {
     var playlist: PlaylistInfo? = nil
     /// Set when only a part of the video is wanted.
     var section: ClipSection? = nil
+    /// Taken from the saved queue at launch (not added just now).
+    var resumedFromSaved = false
     /// The size told by the quality check, when there was one: the bar shows the final size from the start.
     var expectedBytes: Int64? = nil
 
@@ -142,8 +144,7 @@ final class DownloadQueue: ObservableObject {
     }
 
     private static var storeURL: URL {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return support.appendingPathComponent("VideoDownloader/queue.json")
+        AppSupport.folder.appendingPathComponent("queue.json")
     }
 
     private func save() {
@@ -182,7 +183,8 @@ final class DownloadQueue: ObservableObject {
                                PlaylistInfo(id: id, title: item.playlistTitle, listURL: item.playlistURL ?? "",
                                             thumbnail: item.playlistThumbnail.flatMap(URL.init(string:)))
                            },
-                           section: item.section)
+                           section: item.section,
+                           resumedFromSaved: true)
         }
         for item in saved {
             if let id = item.playlistID, let done = item.playlistDone, done > 0 {
@@ -429,6 +431,7 @@ final class DownloadQueue: ObservableObject {
                     section: item.section))
                 continue
             }
+            manager.isRestoredRun = item.resumedFromSaved
             manager.start(urlString: item.url,
                           destination: item.destination,
                           maxHeight: item.maxHeight,

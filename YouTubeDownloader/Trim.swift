@@ -637,6 +637,7 @@ struct TrimView: View {
                         .padding(8)
                 }
             }
+            .overlay(alignment: .bottomTrailing) { KeysHint() }
     }
 
     private var playerContent: some View {
@@ -953,5 +954,51 @@ struct QualityPicker: View {
         }
         if let bytes = manager.approxSizeByHeight[h] { return "\(name), ≈ " + ContentView.formatBytes(bytes) }
         return name
+    }
+}
+
+
+// MARK: - The keys of the clip window
+
+/// A small keyboard in the corner of the video: with the pointer over it, the list of keys opens on a
+/// see-through panel; with the pointer gone, it folds back.
+private struct KeysHint: View {
+    @State private var open = false
+    @ObservedObject private var languageSettings = LanguageSettings.shared
+
+    private static let rows = [
+        "**Пробел:** пауза и воспроизведение",
+        "**← →:** перемотка на 5 секунд",
+        "**Shift + ← →:** точная перемотка на 1 секунду",
+        "**, .:** покадровая перемотка",
+        "**0–9:** быстрый переход по видео (5 это середина)",
+    ]
+
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            if open {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(tr("Клавиши")).font(.callout.weight(.semibold))
+                    ForEach(Self.rows, id: \.self) { row in
+                        boldMarkdown(tr(row)).font(.caption)
+                    }
+                }
+                .foregroundStyle(.white)
+                .padding(12)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Color.black.opacity(0.62)))
+                .transition(.opacity)
+            } else {
+                Image(systemName: "keyboard")
+                    .font(.system(size: 15))
+                    .foregroundStyle(.white.opacity(0.75))
+                    .padding(7)
+                    .background(Circle().fill(Color.black.opacity(0.4)))
+                    .transition(.opacity)
+            }
+        }
+        .padding(10)
+        .contentShape(Rectangle())
+        .onHover { open = $0 }
+        .animation(.easeOut(duration: 0.15), value: open)
     }
 }

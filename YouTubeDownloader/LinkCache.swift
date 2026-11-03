@@ -16,10 +16,7 @@ enum ProbeCache {
     static let lifetime: TimeInterval = 24 * 3600
     static let limit = 100
 
-    private static let file: URL = {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("VideoDownloader/probe-cache.json")
-    }()
+    private static let file: URL = AppSupport.folder.appendingPathComponent("probe-cache.json")
 
     private static var entries: [String: Entry] = {
         guard let data = try? Data(contentsOf: file),

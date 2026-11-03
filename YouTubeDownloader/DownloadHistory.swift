@@ -39,8 +39,7 @@ final class DownloadHistory: ObservableObject {
     private var storeURL: URL { dir.appendingPathComponent("history.json") }
 
     private init() {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        dir = support.appendingPathComponent("VideoDownloader/History", isDirectory: true)
+        dir = AppSupport.folder.appendingPathComponent("History", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         load()
         prune()
@@ -173,7 +172,24 @@ final class DownloadHistory: ObservableObject {
         guard let data = try? Data(contentsOf: storeURL) else { return }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        items = (try? decoder.decode([HistoryItem].self, from: data)) ?? []
+        // One entry that cannot be read must not wipe all the others.
+        struct Lossy: Decodable {
+            let item: HistoryItem?
+            init(from decoder: Decoder) throws { item = try? HistoryItem(from: decoder) }
+        }
+        guard let entries = try? decoder.decode([Lossy].self, from: data) else {
+            // The file as a whole is unreadable: it is put aside (not written over with an empty list).
+            let aside = dir.appendingPathComponent("history-broken.json")
+            try? FileManager.default.removeItem(at: aside)
+            try? FileManager.default.moveItem(at: storeURL, to: aside)
+            return
+        }
+        items = entries.compactMap(\.item)
+        if items.count != entries.count {
+            let aside = dir.appendingPathComponent("history-before-repair.json")
+            try? FileManager.default.removeItem(at: aside)
+            try? data.write(to: aside, options: .atomic)
+        }
     }
 
     private func save() {
