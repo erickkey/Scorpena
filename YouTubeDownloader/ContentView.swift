@@ -1859,6 +1859,14 @@ struct InfoScaffold<Content: View>: View {
     }
 }
 
+/// A text where **words between double stars** are bold (the first words of a list item).
+func boldMarkdown(_ text: String) -> Text {
+    if let attributed = try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+        return Text(attributed)
+    }
+    return Text(text.replacingOccurrences(of: "**", with: ""))
+}
+
 /// Bulleted "heading + items" block, shared by both windows.
 func infoSection(_ title: String, _ items: [String]) -> some View {
     VStack(alignment: .leading, spacing: 8) {
@@ -1869,7 +1877,7 @@ func infoSection(_ title: String, _ items: [String]) -> some View {
                 if item.contains("⚙") {
                     TextWithGear(text: item, action: { AdvancedSettingsPanel.shared.show() })
                 } else {
-                    Text(item).font(.callout).fixedSize(horizontal: false, vertical: true)
+                    boldMarkdown(item).font(.callout).fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -1913,24 +1921,24 @@ struct AboutView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
 
-                infoSection(tr("Что есть"), [
-                    "Скачивает видео и звук: MP4, MOV, WebM, MKV, MP3, WAV, M4A",
-                    "Показывает, какое качество есть и сколько весит файл, ещё до скачивания",
-                    "Сама подставляет ссылку, которую ты скопировал",
-                    "Качает несколько видео сразу и плейлисты целиком",
-                    "Вырезает из видео только нужный кусок",
-                    "Если закрыл программу или пропал интернет, скачивание продолжится",
-                    "Хранит очередь и историю скачиваний",
-                    "Можно ограничить скорость, чтобы интернет не тормозил",
-                    "Светлая и тёмная тема",
-                    "Обновляется сама одной кнопкой",
-                    "Русский, английский, китайский, хинди и испанский",
-                    "Работает на любом Mac (Intel и Apple Silicon), macOS 13 и новее",
+                infoSection(tr("Возможности"), [
+                    "**Загрузка:** видео (MP4, MOV, WebM, MKV) и звук (MP3, WAV, M4A)",
+                    "**Качество и размер:** перед скачиванием видно, какое качество есть и сколько будет весить файл",
+                    "**Фрагменты:** можно скачать не всё видео, а только нужный кусок",
+                    "**Очередь:** до 3 видео скачиваются одновременно, остальные запускаются автоматически по мере завершения предыдущих",
+                    "**Плейлисты:** скачивание плейлистов",
+                    "**История:** список скачанного, откуда файл открывается в один клик",
+                    "**Докачка:** если закрыть программу или пропал интернет, скачивание продолжится",
+                    "**Скорость:** ограничение скорости скачивания",
+                    "**Ссылка:** скопированная ссылка вставляется в поле сама",
+                    "**Оформление:** светлая и тёмная тема, пять языков",
+                    "**Обновление:** новая версия ставится одной кнопкой",
+                    "**Совместимость:** любой Mac (Intel и Apple Silicon), macOS 13 и новее",
                 ].map(tr))
 
-                infoSection(tr("Чего нет"), [
-                    "Скачивания платного и защищённого видео (Netflix, Disney+, Prime Video, Apple TV+, Кинопоиск, ivi, Okko и т.д.): оно закрыто DRM, системой шифрования от копирования.",
-                    "Записи идущих прямых эфиров: только уже завершённых.",
+                infoSection(tr("Ограничения"), [
+                    "**Защищённый контент:** Netflix, Disney+, Prime Video, Apple TV+, Кинопоиск, ivi, Okko и другие сервисы с DRM скачать нельзя: они шифруют видео от копирования",
+                    "**Прямые трансляции:** можно записать только уже закончившиеся эфиры",
                 ].map(tr))
 
                 VStack(alignment: .leading, spacing: 10) {
