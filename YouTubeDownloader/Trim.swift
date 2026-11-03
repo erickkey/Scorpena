@@ -19,6 +19,7 @@ final class TrimPanel {
     private var window: NSWindow?
     private var model: TrimModel?
     private var closeObserver: NSObjectProtocol?
+    private var keyMonitor: Any?
 
     func show(manager: DownloadManager) {
         NSApp.activate(ignoringOtherApps: true)
@@ -40,9 +41,25 @@ final class TrimPanel {
         win.centerExactlyOnScreen()
         win.makeKeyAndOrderFront(nil)
         window = win
+        // Space plays and pauses; the arrows go a second back or forward (half a second with Shift) —
+        // unless a time is being typed in.
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak win] event in
+            guard let self, let win, event.window === win, let model = self.model, model.previewReady,
+                  !(win.firstResponder is NSTextView) else { return event }
+            let step = event.modifierFlags.contains(.shift) ? 0.5 : 1.0
+            switch event.keyCode {
+            case 49:  model.togglePlay()
+            case 123: model.nudge(by: -step)
+            case 124: model.nudge(by: step)
+            default:  return event
+            }
+            return nil
+        }
         closeObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification, object: win, queue: .main
         ) { [weak self] _ in
+            if let monitor = self?.keyMonitor { NSEvent.removeMonitor(monitor) }
+            self?.keyMonitor = nil
             self?.model?.shutdown()
             self?.model = nil
             self?.window = nil
@@ -98,7 +115,17 @@ final class TrimModel: ObservableObject {
     var link: String { LinkField.shared.text.trimmingCharacters(in: .whitespacesAndNewlines) }
     var linkIsUsable: Bool { ContentView.isPlausibleURLString(link) }
     var section: ClipSection { ClipSection(start: start, end: end) }
-    var sectionIsValid: Bool { phase == .ready && end - start >= 0.2 && start >= 0 && end <= duration + 0.05 }
+    /// The length of the video: from the viewing copy when it is ready, from the quality check before that
+    /// (0 = not known yet).
+    var total: Double { duration > 0 ? duration : (manager.probedDuration ?? 0) }
+    /// A part can be downloaded as soon as the link is usable and the times make sense — the preview
+    /// does not have to be ready (the times may be typed in at once).
+    var sectionIsValid: Bool {
+        linkIsUsable && end - start >= 0.2 && start >= 0 && (total <= 0 || end <= total + 0.05)
+    }
+    /// Playing and the marks on the timeline need the viewing copy.
+    var previewReady: Bool { phase == .ready }
+    private var typedByUser = false
 
     // MARK: Loading the viewing copy
 
@@ -119,6 +146,7 @@ final class TrimModel: ObservableObject {
         loadedLink = ""
         title = nil
         duration = 0; start = 0; end = 0; current = 0
+        typedByUser = false
         startText = "0:00"; endText = "0:00"
         phase = .empty
     }
@@ -265,10 +293,16 @@ final class TrimModel: ObservableObject {
         let player = AVPlayer(playerItem: item)
         let seconds = item.asset.duration.seconds
         duration = seconds.isFinite ? seconds : 0
-        start = 0
-        end = duration
-        startText = ClipSection.clock(0)
-        endText = ClipSection.clock(duration)
+        if typedByUser, end > start + minimumGap {
+            // The times were typed in while the preview was being prepared: they stay.
+            start = min(start, max(0, duration - minimumGap))
+            end = min(end, duration)
+        } else {
+            start = 0
+            end = duration
+        }
+        startText = ClipSection.clock(start)
+        endText = ClipSection.clock(end)
         current = 0
         removePlayer()
         self.player = player
@@ -329,7 +363,7 @@ final class TrimModel: ObservableObject {
     /// One button for the marked part: plays it (so it can be checked by ear before downloading),
     /// pauses it, and carries on from where it stopped. After the end it starts again from the start mark.
     func toggleClipPlayback() {
-        guard let player, sectionIsValid else { return }
+        guard let player, phase == .ready, sectionIsValid else { return }
         if isPlaying {
             player.pause()
             return
@@ -381,14 +415,33 @@ final class TrimModel: ObservableObject {
         endText = ClipSection.clock(end)
     }
 
+    /// Typing a time: it counts at once (so «Скачать фрагмент» can be pressed right after typing).
+    func startTextEdited() {
+        if let value = ClipSection.parse(startText) { start = max(0, value); typedByUser = true }
+    }
+
+    func endTextEdited() {
+        if let value = ClipSection.parse(endText) { end = max(0, value); typedByUser = true }
+    }
+
     func commitStartText() {
-        if let value = ClipSection.parse(startText) { place(start: value, pushingEnd: true) }
-        else { startText = ClipSection.clock(start) }
+        guard let value = ClipSection.parse(startText) else { startText = ClipSection.clock(start); return }
+        typedByUser = true
+        if phase == .ready { place(start: value, pushingEnd: true) }
+        else { start = max(0, value); startText = ClipSection.clock(start) }
     }
 
     func commitEndText() {
-        if let value = ClipSection.parse(endText) { place(end: value, pushingStart: true) }
-        else { endText = ClipSection.clock(end) }
+        guard let value = ClipSection.parse(endText) else { endText = ClipSection.clock(end); return }
+        typedByUser = true
+        if phase == .ready { place(end: value, pushingStart: true) }
+        else { end = total > 0 ? min(max(0, value), total) : max(0, value); endText = ClipSection.clock(end) }
+    }
+
+    /// The arrow keys: a step back or forward in the video.
+    func nudge(by seconds: Double) {
+        guard phase == .ready else { return }
+        seek(to: current + seconds)
     }
 
     // MARK: Downloading the part
@@ -396,11 +449,12 @@ final class TrimModel: ObservableObject {
     /// Puts the marked part into the download queue, with the choices of the main window.
     /// The part of the whole file's size that the marks cover.
     private func clipExpectedBytes(height: Int?, audioOnly: Bool) -> Int64? {
-        guard duration > 0, let whole = manager.expectedSize(height: height, audioOnly: audioOnly) else { return nil }
-        return Int64(Double(whole) * (end - start) / duration)
+        guard total > 0, let whole = manager.expectedSize(height: height, audioOnly: audioOnly) else { return nil }
+        return Int64(Double(whole) * (end - start) / total)
     }
 
     func downloadClip(audioOnly: Bool, qualityHeight: Int, stripAudio: Bool, destination: URL) {
+        commitStartText(); commitEndText()      // a time typed a moment ago and not confirmed yet
         guard sectionIsValid else { return }
         let maxHeight = manager.availableHeights.isEmpty ? nil : (qualityHeight == 0 ? nil : qualityHeight)
         let item = QueuedDownload(url: link, destination: destination, maxHeight: maxHeight,
@@ -473,14 +527,16 @@ struct TrimView: View {
                 .font(.caption)
             }
             playerArea
-            // The controls are there from the start, grey and out of reach until a video is open.
-            Group {
-                TrimTimeline(model: model)
-                markRow
-                optionsRow
-            }
-            .disabled(model.phase != .ready)
-            .opacity(model.phase == .ready ? 1 : 0.4)
+            // The controls are there from the start. The timeline and the «здесь» buttons wait for the
+            // preview; the times and the choices work as soon as there is a link, so a part whose times
+            // are known can be cut at once.
+            TrimTimeline(model: model)
+                .disabled(!model.previewReady)
+                .opacity(model.previewReady ? 1 : 0.4)
+            markRow
+            optionsRow
+                .disabled(!model.linkIsUsable)
+                .opacity(model.linkIsUsable ? 1 : 0.4)
             Spacer(minLength: 0)
             bottomRow
         }
@@ -579,16 +635,30 @@ struct TrimView: View {
         }
     }
 
+    private enum TimeField { case start, end }
+    @FocusState private var focusedTime: TimeField?
+    @State private var previousFocus: TimeField?
+
     private var markRow: some View {
         HStack(spacing: 18) {
-            markGroup(title: tr("Начало"), text: $model.startText,
-                      commit: { model.commitStartText() }, button: tr("Начало здесь")) { model.markStartHere() }
-            markGroup(title: tr("Конец"), text: $model.endText,
-                      commit: { model.commitEndText() }, button: tr("Конец здесь")) { model.markEndHere() }
+            markGroup(title: tr("Начало"), field: .start, text: $model.startText,
+                      edited: { model.startTextEdited() }, commit: { model.commitStartText()},
+                      button: tr("Начало здесь")) { model.markStartHere() }
+            markGroup(title: tr("Конец"), field: .end, text: $model.endText,
+                      edited: { model.endTextEdited() }, commit: { model.commitEndText() },
+                      button: tr("Конец здесь")) { model.markEndHere() }
+        }
+        .opacity(model.linkIsUsable ? 1 : 0.4)
+        .onChange(of: focusedTime) { now in
+            // Leaving a field confirms what was typed in it.
+            if previousFocus == .start, now != .start { model.commitStartText() }
+            if previousFocus == .end, now != .end { model.commitEndText() }
+            previousFocus = now
         }
     }
 
-    private func markGroup(title: String, text: Binding<String>, commit: @escaping () -> Void,
+    private func markGroup(title: String, field: TimeField, text: Binding<String>,
+                           edited: @escaping () -> Void, commit: @escaping () -> Void,
                            button: String, action: @escaping () -> Void) -> some View {
         HStack(spacing: 8) {
             Text(title).font(.caption).foregroundStyle(.secondary)
@@ -597,8 +667,12 @@ struct TrimView: View {
                 .multilineTextAlignment(.center)
                 .frame(width: 74)
                 .font(.system(.body, design: .monospaced))
+                .focused($focusedTime, equals: field)
+                .onChange(of: text.wrappedValue) { _ in if focusedTime == field { edited() } }
+                .disabled(!model.linkIsUsable)
             Button(action: action) { Text(button) }
                 .buttonStyle(SoftPillStyle(compact: true))
+                .disabled(!model.previewReady)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -646,8 +720,8 @@ struct TrimView: View {
             ? manager.availableHeights.first : qualityHeight
         let whole: Int64? = downloadMode == "audio" ? manager.approxAudioBytes
             : height.flatMap { manager.approxSizeByHeight[$0] }
-        if let whole, model.duration > 0 {
-            let part = Int64(Double(whole) * (model.end - model.start) / model.duration)
+        if let whole, model.total > 0 {
+            let part = Int64(Double(whole) * (model.end - model.start) / model.total)
             text += " · ≈ " + ContentView.formatBytes(part) + " (" + tr("весь ролик:") + " " + ContentView.formatBytes(whole) + ")"
         }
         return text
@@ -675,7 +749,7 @@ struct TrimView: View {
                         .frame(width: 190)
                 }
                 .buttonStyle(SoftPillStyle())
-                .disabled(!model.sectionIsValid)
+                .disabled(!model.previewReady || !model.sectionIsValid)
                 Spacer()
                 Button { onClose() } label: { Text(tr("Закрыть")).lineLimit(1).fixedSize() }
                     .buttonStyle(SoftPillStyle())

@@ -69,6 +69,7 @@ final class DownloadManager: ObservableObject {
     // Quality probe.
     @Published private(set) var isProbing = false
     @Published private(set) var probedTitle: String?
+    @Published private(set) var probedDuration: Double?                  // seconds, from the quality check
     @Published private(set) var availableHeights: [Int] = []      // sorted high → low
     @Published private(set) var approxSizeByHeight: [Int: Int64] = [:]   // bytes, video+audio combined
     @Published private(set) var approxAudioBytes: Int64?                 // bytes, mp3 320kbps estimate
@@ -329,6 +330,8 @@ final class DownloadManager: ObservableObject {
             availableHeights = []
             approxSizeByHeight = [:]
             approxAudioBytes = nil
+            probedDuration = nil
+        probedDuration = nil
         }
     }
 
@@ -360,6 +363,7 @@ final class DownloadManager: ObservableObject {
         availableHeights = []
         approxSizeByHeight = [:]
         approxAudioBytes = nil
+        probedDuration = nil
 
         // What the check finds lives in memory and shows only in the quality choice (its own spinner
         // says it is looking) — the status line is for the download.
@@ -385,6 +389,7 @@ final class DownloadManager: ObservableObject {
                     self.availableHeights = heights
                     self.approxSizeByHeight = sizes
                     self.approxAudioBytes = duration.map { Int64($0 * 40_000) }   // 320 kbps ≈ 40 KB/s
+                    self.probedDuration = duration
                 } else if !self.isRunning {
                     self.needsFullDiskAccess = outcome.sawAuthWall && !Self.hasDiskAccess
                 }
