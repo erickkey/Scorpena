@@ -216,7 +216,12 @@ struct ContentView: View {
                 .buttonStyle(.plain)   // the icons keep one colour: no system highlight on hover
             }
         }
-        .background(WindowAccessor { windowFitter.window = $0 })
+        .background(WindowAccessor {
+            windowFitter.window = $0
+            // No full-screen / zoom button: this window is small by design.
+            $0.standardWindowButton(.zoomButton)?.isHidden = true
+            $0.collectionBehavior.insert(.fullScreenNone)
+        })
         .frame(minWidth: 560, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear {
             // A specific resolution picked in a past probe (persisted across
