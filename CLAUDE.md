@@ -165,7 +165,7 @@ final wording themselves as often as not; paste their edits back into the
   has open themselves (they do sometimes inspect the built DMG in Finder
   while you're mid-session).
 
-## Unreleased work after 3.1.1 (local commit 3f060fb, not pushed)
+## Unreleased work after 3.1.1 (local commits 3f060fb … 717f33b, not pushed; Windows version removed)
 
 Details in the memory note `project_scorpena_unreleased_state`. In short: clip window (`Trim.swift`),
 one progress bar for the whole job (`BarDriver`/`SmoothBar` in `Style.swift`), reworked queue/history
@@ -173,7 +173,8 @@ window, «Файл уже скачан», one hand-drawn toolbar icon set (`Tool
 single «show the file» rule («Файл не найден» when it is gone).
 
 **Before any release build:** remove every `DEV-TEST-HOOK` block (env vars `SCORPENA_TRIM_*`,
-`SCORPENA_OPEN_DOWNLOADS`, `SCORPENA_AUTODL`, `SCORPENA_PROGRESS_LOG`); get the new texts approved.
+`SCORPENA_OPEN`, `SCORPENA_OPEN_DOWNLOADS`, `SCORPENA_AUTODL`, `SCORPENA_AUTODL_AUDIO`, `SCORPENA_TEST_SPEED`,
+`SCORPENA_PROGRESS_LOG`); get the new texts approved; bump APP_VERSION so the 3.2 «Что нового» shows.
 
 **Testing rule:** a test build shares `~/Library/Application Support/VideoDownloader` (queue, history,
 partial files) with the user's real app and the user may be using it — never kill it without saying
