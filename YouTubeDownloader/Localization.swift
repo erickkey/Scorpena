@@ -123,6 +123,7 @@ func trf(_ russianFormat: String, _ args: CVarArg...) -> String {
 
 enum Translations {
     static let en: [String: String] = [
+        "Светлая и тёмная тема": "Light and dark theme",
         "Выбери язык": "Choose your language",
         "Свернуть все": "Collapse all",
         "Развернуть все": "Expand all",

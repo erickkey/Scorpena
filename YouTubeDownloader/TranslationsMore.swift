@@ -4,6 +4,7 @@ import Foundation
 // Texts missing here fall back to English (then Russian) — see `tr`.
 extension Translations {
     static let zh: [String: String] = [
+        "Светлая и тёмная тема": "浅色和深色主题",
         "Возможности": "功能",
         "Ограничения": "限制",
         "**Загрузка:** видео (MP4, MOV, WebM, MKV) и звук (MP3, WAV, M4A)": "**下载：** 视频（MP4、MOV、WebM、MKV）和音频（MP3、WAV、M4A）",
@@ -306,6 +307,7 @@ extension Translations {
     ]
 
     static let hi: [String: String] = [
+        "Светлая и тёмная тема": "लाइट और डार्क थीम",
         "Возможности": "विशेषताएं",
         "Ограничения": "सीमाएं",
         "**Загрузка:** видео (MP4, MOV, WebM, MKV) и звук (MP3, WAV, M4A)": "**डाउनलोड:** वीडियो (MP4, MOV, WebM, MKV) और ऑडियो (MP3, WAV, M4A)",
@@ -608,6 +610,7 @@ extension Translations {
     ]
 
     static let es: [String: String] = [
+        "Светлая и тёмная тема": "Tema claro y oscuro",
         "Возможности": "Funciones",
         "Ограничения": "Limitaciones",
         "**Загрузка:** видео (MP4, MOV, WebM, MKV) и звук (MP3, WAV, M4A)": "**Descarga:** vídeo (MP4, MOV, WebM, MKV) y audio (MP3, WAV, M4A)",
