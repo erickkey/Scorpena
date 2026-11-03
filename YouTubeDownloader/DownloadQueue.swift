@@ -479,10 +479,10 @@ final class DownloadQueue: ObservableObject {
         switch phase {
         case .finished:
             succeeded = true
-            note = tr("Готово")
+            note = "Готово"        // looked up with `tr` when shown, so a change of language reaches it
         case .cancelled:
             succeeded = false
-            note = tr("Отменено")
+            note = "Отменено"
         case .failed(let message):
             succeeded = false
             note = String(message.split(separator: "\n").first ?? "").prefix(110).description
@@ -562,7 +562,7 @@ final class DownloadsPanel {
         )
         let win = NSWindow(contentViewController: hosting)
         win.styleMask = [.titled, .closable]
-        win.title = tr("Загрузки")
+        win.setLocalizedTitle("Загрузки")
         win.isReleasedWhenClosed = false
         win.isRestorable = false
         win.setContentSize(NSSize(width: 560, height: 700))
@@ -841,7 +841,7 @@ struct QueueView: View {
                      image: item.image,
                      progress: item.succeeded ? 1 : nil,
                      statusIcon: item.succeeded ? "checkmark.circle.fill" : "xmark.circle",
-                     status: item.note) {
+                     status: tr(item.note)) {
             if let file = item.fileURL {
                 if missingFile == item.id {
                     // Red on a light pill: readable on top of any cover picture.
@@ -865,6 +865,7 @@ struct QueueView: View {
 
 /// One running (or paused) download, with its own pause and cancel.
 private struct RunningCard: View {
+    @ObservedObject private var languageSettings = LanguageSettings.shared   // texts below are looked up on every redraw
     @ObservedObject var manager: DownloadManager
     let job: RunningJob?
     @ObservedObject private var queue = DownloadQueue.shared
@@ -925,6 +926,7 @@ private struct CardButton: View {
 
 /// A download as a rectangle with its cover picture behind the text.
 private struct DownloadCard<Actions: View>: View {
+    @ObservedObject private var languageSettings = LanguageSettings.shared   // texts below are looked up on every redraw
     let title: String
     let subtitle: String
     let image: NSImage?

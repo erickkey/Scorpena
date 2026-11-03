@@ -33,7 +33,7 @@ final class TrimPanel {
         )
         let win = NSWindow(contentViewController: hosting)
         win.styleMask = [.titled, .closable]
-        win.title = tr("Вырезать фрагмент")
+        win.setLocalizedTitle("Вырезать фрагмент")
         win.isReleasedWhenClosed = false
         win.isRestorable = false
         win.setContentSize(NSSize(width: 660, height: 706))
@@ -705,6 +705,7 @@ struct TrimView: View {
 // MARK: - Timeline with two handles
 
 private struct TrimTimeline: View {
+    @ObservedObject private var languageSettings = LanguageSettings.shared   // texts below are looked up on every redraw
     @ObservedObject var model: TrimModel
     private let handleWidth: CGFloat = 12
 
@@ -772,6 +773,7 @@ private struct TrimTimeline: View {
 /// «Выбор качества: …» — the one menu of the main, queue and clip windows: nothing is known until
 /// the link's automatic quality check is done, then every height with its size.
 struct QualityPicker: View {
+    @ObservedObject private var languageSettings = LanguageSettings.shared   // texts below are looked up on every redraw
     @ObservedObject var manager: DownloadManager
     let link: String
     @Binding var height: Int

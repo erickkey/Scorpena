@@ -254,6 +254,7 @@ struct FlowLayout: Layout {
 /// A paragraph in which a "⚙" is the real gear button of the toolbar: it looks the
 /// same and opens the same «Дополнительно» window.
 struct TextWithGear: View {
+    @ObservedObject private var languageSettings = LanguageSettings.shared   // texts below are looked up on every redraw
     let text: String
     let action: () -> Void
 
@@ -508,5 +509,20 @@ enum FileReveal {
             NSWorkspace.shared.activateFileViewerSelecting([url])
         }
         return true
+    }
+}
+
+
+extension NSWindow {
+    /// Sets a title that follows the language: the Russian text is kept as the window's identifier and
+    /// `AppDelegate` looks it up again when the language is changed while the window is open.
+    func setLocalizedTitle(_ russian: String) {
+        identifier = NSUserInterfaceItemIdentifier("title:" + russian)
+        title = tr(russian)
+    }
+
+    func refreshLocalizedTitle() {
+        guard let raw = identifier?.rawValue, raw.hasPrefix("title:") else { return }
+        title = tr(String(raw.dropFirst(6)))
     }
 }

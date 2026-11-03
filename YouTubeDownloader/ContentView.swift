@@ -1361,7 +1361,7 @@ final class InfoPanel {
     func show() {
         NSApp.activate(ignoringOtherApps: true)
         if let window {
-            window.title = tr(title)
+            window.setLocalizedTitle(title)
             window.centerExactlyOnScreen()
             window.makeKeyAndOrderFront(nil)
             return
@@ -1371,7 +1371,7 @@ final class InfoPanel {
         )
         let win = NSWindow(contentViewController: hosting)
         win.styleMask = [.titled, .closable]
-        win.title = tr(title)
+        win.setLocalizedTitle(title)
         win.isReleasedWhenClosed = false
         win.isRestorable = false
         win.setContentSize(size)
@@ -1401,7 +1401,7 @@ final class AdvancedSettingsPanel {
         self.manager = manager
         NSApp.activate(ignoringOtherApps: true)
         if let window {
-            window.title = tr("Дополнительно")
+            window.setLocalizedTitle("Дополнительно")
             window.centerExactlyOnScreen()
             window.makeKeyAndOrderFront(nil)
             return
@@ -1411,7 +1411,7 @@ final class AdvancedSettingsPanel {
         )
         let win = NSWindow(contentViewController: hosting)
         win.styleMask = [.titled, .closable]
-        win.title = tr("Дополнительно")
+        win.setLocalizedTitle("Дополнительно")
         win.isReleasedWhenClosed = false
         win.isRestorable = false
         hosting.view.layoutSubtreeIfNeeded()
@@ -1608,9 +1608,11 @@ final class ShareHelper: NSObject, NSSharingServicePickerDelegate {
     static let shared = ShareHelper()
     private var picker: NSSharingServicePicker?
 
-    private static let message = """
-    Нашёл удобную программу для Mac — SCORPENA – video downloader. Она скачивает видео/аудио с YouTube, VK, Instagram, TikTok и ещё кучи сайтов в один клик. Вот ссылка на актуальную версию: https://github.com/erickkey/Scorpena/releases/latest/download/Scorpena.dmg
-    """
+    /// The message goes out in the language of the app (the link is the same for everyone).
+    private static var message: String {
+        tr("Нашёл удобную программу для Mac: SCORPENA – video downloader. Она скачивает видео и аудио с YouTube, VK, Instagram, TikTok и ещё кучи сайтов в один клик. Вот ссылка на актуальную версию:")
+            + " https://github.com/erickkey/Scorpena/releases/latest/download/Scorpena.dmg"
+    }
 
     /// Titles of default services that don't make sense for a short "tell a
     /// friend" message. An allow-list (matching by `isEqual` against
@@ -1649,7 +1651,7 @@ final class ShareHelper: NSObject, NSSharingServicePickerDelegate {
                                proposedSharingServices proposedServices: [NSSharingService]) -> [NSSharingService] {
         let kept = proposedServices.filter { !Self.deniedTitles.contains($0.title) }
         let copyIcon = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: nil) ?? NSImage()
-        let copyService = NSSharingService(title: "Скопировать", image: copyIcon, alternateImage: copyIcon) {
+        let copyService = NSSharingService(title: tr("Скопировать"), image: copyIcon, alternateImage: copyIcon) {
             let pasteboard = NSPasteboard.general
             pasteboard.clearContents()
             pasteboard.setString(Self.message, forType: .string)
@@ -1776,6 +1778,7 @@ final class WhatsNewPanel {
 
 /// The list of changes in a card, and the highlighted call to action under it.
 private struct WhatsNewList: View {
+    @ObservedObject private var languageSettings = LanguageSettings.shared   // texts below are looked up on every redraw
     let version: String
 
     var body: some View {

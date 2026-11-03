@@ -165,8 +165,32 @@ final class DownloadManager: ObservableObject {
     private let ytDlpKey = "ytDlpPath"
     private let ffmpegKey = "ffmpegPath"
 
+    private var languageWatcher: AnyCancellable?
+
     init() {
         refreshTools()
+        // Whatever error or «cancelled» note is on screen was worded in the old language: it is put into
+        // the new one when it is a plain text, and goes away when it cannot be (it has numbers in it).
+        languageWatcher = LanguageSettings.shared.$language.dropFirst().sink { [weak self] _ in
+            // `@Published` announces before the new value is in: look again a moment later.
+            DispatchQueue.main.async { self?.languageChanged() }
+        }
+    }
+
+    private func languageChanged() {
+        switch phase {
+        case .failed(let message):
+            if let again = retranslated(message) {
+                phase = .failed(again)
+                statusLine = retranslated(statusLine) ?? statusLine
+            } else {
+                phase = .idle
+                statusLine = ""
+            }
+        case .cancelled:
+            statusLine = retranslated(statusLine) ?? ""
+        default: break
+        }
     }
 
     var isRunning: Bool { phase == .running }

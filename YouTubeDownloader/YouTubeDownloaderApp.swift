@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 @main
 struct YouTubeDownloaderApp: App {
@@ -26,7 +27,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DiagnosticReporter.reportPreviousCrashIfAny()
         DispatchQueue.main.asyncAfter(deadline: .now() + 25) { DiagnosticReporter.checkBundledTools() }
         installEscapeToClose()
+        // Windows that are open when the language is changed get their titles in the new language too.
+        languageTitles = LanguageSettings.shared.$language.dropFirst().sink { _ in
+            DispatchQueue.main.async { NSApp.windows.forEach { $0.refreshLocalizedTitle() } }
+        }
     }
+
+    private var languageTitles: AnyCancellable?
 
     private var escapeMonitor: Any?
 

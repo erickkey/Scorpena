@@ -98,6 +98,21 @@ func tr(_ russian: String) -> String {
     }
 }
 
+/// A text that was translated earlier and is still on screen (an error, «cancelled»…), put into the
+/// language that is on now. nil when it is not a plain translation (it carries numbers, say).
+func retranslated(_ shown: String) -> String? {
+    struct Reverse { static let table: [String: String] = {
+        var table: [String: String] = [:]
+        for dictionary in [Translations.en, Translations.zh, Translations.hi, Translations.es] {
+            for (russian, translated) in dictionary { table[translated] = russian }
+        }
+        return table
+    }() }
+    if let russian = Reverse.table[shown] { return tr(russian) }
+    if Translations.en[shown] != nil { return tr(shown) }      // it is the Russian text itself
+    return nil
+}
+
 /// Same as `tr`, for strings that carry interpolated values. Dictionary
 /// keys/values are `String(format:)` templates (`%@`, `%d`, …) — this keeps
 /// every translation a plain static string pair, with no string-building
@@ -277,6 +292,8 @@ enum Translations {
         "Звук запуска приложения": "App launch sound",
         "Выбор качества:": "Choose quality:",
         "Показать папку": "Show folder",
+        "Нашёл удобную программу для Mac: SCORPENA – video downloader. Она скачивает видео и аудио с YouTube, VK, Instagram, TikTok и ещё кучи сайтов в один клик. Вот ссылка на актуальную версию:": "Found a handy app for Mac: SCORPENA – video downloader. It downloads video and audio from YouTube, VK, Instagram, TikTok and loads of other sites in one click. Here is the link to the current version:",
+        "Скопировать": "Copy",
         "Скачивает видео и звук: MP4, MOV, WebM, MKV, MP3, WAV, M4A": "Downloads video and audio: MP4, MOV, WebM, MKV, MP3, WAV, M4A",
         "Показывает, какое качество есть и сколько весит файл, ещё до скачивания": "Shows which qualities are available and how big the file is, before you download",
         "Сама подставляет ссылку, которую ты скопировал": "Fills in the link you copied by itself",
