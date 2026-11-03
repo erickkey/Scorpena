@@ -1,7 +1,7 @@
 # VideoDownloader — project notes for Claude
 
 macOS SwiftUI app (yt-dlp + ffmpeg wrapper) for downloading video/audio from
-YouTube, VK, Instagram, TikTok, Vimeo, and ~1750 other sites. Built for the
+YouTube, VK, Instagram, TikTok, Vimeo, and 1000+ other sites. Built for the
 user's friends — casual, non-technical audience, distributed as a DMG via
 AirDrop/Telegram/GitHub Releases (never send via Telegram/WhatsApp directly,
 it corrupts the file — that's why README warns about it).

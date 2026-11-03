@@ -3,7 +3,7 @@
 Технические заметки: как устроена программа, сборка и выпуск. Для пользователей см. [README](README.md).
 
 Нативное приложение для macOS: вставляешь ссылку на видео (**YouTube, VK,
-Instagram, TikTok, Vimeo** и [почти 1750 других сайтов](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md))
+Instagram, TikTok, Vimeo** и [более 1000 других сайтов](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md))
 — получаешь файл. Само приложение — удобная оболочка вокруг **yt-dlp**
 (скачивание), **ffmpeg** (склейка потоков, конвертация) и **deno** (нужен
 yt-dlp, чтобы решать проверки YouTube).

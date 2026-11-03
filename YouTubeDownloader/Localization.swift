@@ -123,7 +123,7 @@ func trf(_ russianFormat: String, _ args: CVarArg...) -> String {
 
 enum Translations {
     static let en: [String: String] = [
-        "Программа для Mac: скачивание видео и звука с YouTube, VK, Instagram, TikTok, Vimeo и ещё около 1750 сайтов, а также вырезание фрагментов, очередь, плейлисты, история и другие инструменты для загрузок.": "A program for Mac: downloading video and audio from YouTube, VK, Instagram, TikTok, Vimeo and about 1750 other sites, as well as cutting out clips, a queue, playlists, history and other tools for downloads.",
+        "Программа для Mac: скачивание видео и звука с YouTube, VK, Instagram, TikTok, Vimeo и ещё более 1000 сайтов, а также вырезание фрагментов, очередь, плейлисты, история и другие инструменты для загрузок.": "A program for Mac: downloading video and audio from YouTube, VK, Instagram, TikTok, Vimeo and more than 1000 other sites, as well as cutting out clips, a queue, playlists, history and other tools for downloads.",
         "пауза и воспроизведение": "pause and play",
         "перемотка на 5 секунд": "skip 5 seconds",
         "точная перемотка на 1 секунду": "precise skip of 1 second",

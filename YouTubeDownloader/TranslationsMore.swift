@@ -4,7 +4,7 @@ import Foundation
 // Texts missing here fall back to English (then Russian) — see `tr`.
 extension Translations {
     static let zh: [String: String] = [
-        "Программа для Mac: скачивание видео и звука с YouTube, VK, Instagram, TikTok, Vimeo и ещё около 1750 сайтов, а также вырезание фрагментов, очередь, плейлисты, история и другие инструменты для загрузок.": "Mac 程序：可从 YouTube、VK、Instagram、TikTok、Vimeo 以及约 1750 个其他网站下载视频和音频，另有片段剪切、队列、播放列表、历史记录等下载工具。",
+        "Программа для Mac: скачивание видео и звука с YouTube, VK, Instagram, TikTok, Vimeo и ещё более 1000 сайтов, а также вырезание фрагментов, очередь, плейлисты, история и другие инструменты для загрузок.": "Mac 程序：可从 YouTube、VK、Instagram、TikTok、Vimeo 以及 1000 多个其他网站下载视频和音频，另有片段剪切、队列、播放列表、历史记录等下载工具。",
         "пауза и воспроизведение": "暂停和播放",
         "перемотка на 5 секунд": "快进快退 5 秒",
         "точная перемотка на 1 секунду": "精确跳转 1 秒",
@@ -314,7 +314,7 @@ extension Translations {
     ]
 
     static let hi: [String: String] = [
-        "Программа для Mac: скачивание видео и звука с YouTube, VK, Instagram, TikTok, Vimeo и ещё около 1750 сайтов, а также вырезание фрагментов, очередь, плейлисты, история и другие инструменты для загрузок.": "Mac के लिए प्रोग्राम: YouTube, VK, Instagram, TikTok, Vimeo और लगभग 1750 अन्य साइटों से वीडियो और ऑडियो डाउनलोड करना, साथ ही क्लिप काटना, कतार, प्लेलिस्ट, इतिहास और डाउनलोड के लिए दूसरे उपकरण।",
+        "Программа для Mac: скачивание видео и звука с YouTube, VK, Instagram, TikTok, Vimeo и ещё более 1000 сайтов, а также вырезание фрагментов, очередь, плейлисты, история и другие инструменты для загрузок.": "Mac के लिए प्रोग्राम: YouTube, VK, Instagram, TikTok, Vimeo और 1000 से ज़्यादा अन्य साइटों से वीडियो और ऑडियो डाउनलोड करना, साथ ही क्लिप काटना, कतार, प्लेलिस्ट, इतिहास और डाउनलोड के लिए दूसरे उपकरण।",
         "пауза и воспроизведение": "रोकना और चलाना",
         "перемотка на 5 секунд": "5 सेकंड आगे-पीछे",
         "точная перемотка на 1 секунду": "1 सेकंड की सटीक छलांग",
@@ -624,7 +624,7 @@ extension Translations {
     ]
 
     static let es: [String: String] = [
-        "Программа для Mac: скачивание видео и звука с YouTube, VK, Instagram, TikTok, Vimeo и ещё около 1750 сайтов, а также вырезание фрагментов, очередь, плейлисты, история и другие инструменты для загрузок.": "Programa para Mac: descarga de vídeo y audio de YouTube, VK, Instagram, TikTok, Vimeo y unos 1750 sitios más, además de recorte de fragmentos, cola, listas de reproducción, historial y otras herramientas para las descargas.",
+        "Программа для Mac: скачивание видео и звука с YouTube, VK, Instagram, TikTok, Vimeo и ещё более 1000 сайтов, а также вырезание фрагментов, очередь, плейлисты, история и другие инструменты для загрузок.": "Programa para Mac: descarga de vídeo y audio de YouTube, VK, Instagram, TikTok, Vimeo y más de 1000 sitios, además de recorte de fragmentos, cola, listas de reproducción, historial y otras herramientas para las descargas.",
         "пауза и воспроизведение": "pausa y reproducción",
         "перемотка на 5 секунд": "saltar 5 segundos",
         "точная перемотка на 1 секунду": "salto preciso de 1 segundo",

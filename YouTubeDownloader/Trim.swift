@@ -21,6 +21,7 @@ final class TrimPanel {
     private var model: TrimModel?
     private var closeObserver: NSObjectProtocol?
     private var keyMonitor: Any?
+    private var clickMonitor: Any?
 
     func show(manager: DownloadManager) {
         NSApp.activate(ignoringOtherApps: true)
@@ -65,11 +66,26 @@ final class TrimPanel {
             }
             return nil
         }
+        // A click anywhere except a text field takes the cursor out of the link / time fields,
+        // so the keys above go to the player and not into the text.
+        clickMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak win] event in
+            guard let win, event.window === win, win.firstResponder is NSTextView else { return event }
+            let hit = win.contentView?.hitTest(event.locationInWindow)
+            var view = hit
+            while let v = view {
+                if v is NSTextField || v is NSTextView { return event }
+                view = v.superview
+            }
+            win.makeFirstResponder(nil)
+            return event
+        }
         closeObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification, object: win, queue: .main
         ) { [weak self] _ in
             if let monitor = self?.keyMonitor { NSEvent.removeMonitor(monitor) }
             self?.keyMonitor = nil
+            if let monitor = self?.clickMonitor { NSEvent.removeMonitor(monitor) }
+            self?.clickMonitor = nil
             self?.model?.shutdown()
             self?.model = nil
             self?.window = nil

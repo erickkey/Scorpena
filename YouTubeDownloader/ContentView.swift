@@ -1929,7 +1929,7 @@ struct AboutView: View {
                 Text(tr("Скопируй ссылку и нажми «Скачать»"))
                     .font(.callout.weight(.semibold).italic())
                     .foregroundColor(.accentColor)
-                Text(tr("Программа для Mac: скачивание видео и звука с YouTube, VK, Instagram, TikTok, Vimeo и ещё около 1750 сайтов, а также вырезание фрагментов, очередь, плейлисты, история и другие инструменты для загрузок."))
+                Text(tr("Программа для Mac: скачивание видео и звука с YouTube, VK, Instagram, TikTok, Vimeo и ещё более 1000 сайтов, а также вырезание фрагментов, очередь, плейлисты, история и другие инструменты для загрузок."))
                     .font(.callout)
                     .foregroundStyle(.secondary)
 

@@ -1,6 +1,6 @@
 # Scorpena – video downloader
 
-Программа для Mac: вставляешь ссылку на видео, и она скачивает его в один клик. Работает с YouTube, VK, Instagram, TikTok, Vimeo и ещё почти с 1750 сайтами. Бесплатная.
+Программа для Mac: вставляешь ссылку на видео, и она скачивает его в один клик. Работает с YouTube, VK, Instagram, TikTok, Vimeo и ещё с более чем 1000 сайтов. Бесплатная.
 
 **Скачать:** [Scorpena.dmg](https://github.com/erickkey/Scorpena/releases/latest/download/Scorpena.dmg)
 
