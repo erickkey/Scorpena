@@ -778,10 +778,9 @@ struct QueueView: View {
                         HStack {
                             Text(tr("Недавно завершённые")).font(.subheadline.weight(.semibold))
                             Spacer()
-                            Button(tr("Очистить")) { queue.clearFinished() }
-                                .buttonStyle(.plain)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            // A real button with a body to hit (a bare caption was only clickable on its letters).
+                            Button { queue.clearFinished() } label: { Text(tr("Очистить")).lineLimit(1).fixedSize() }
+                                .buttonStyle(SoftPillStyle(compact: true))
                         }
                         .padding(.top, 8)
                         ForEach(queue.finished) { finishedCard($0) }
