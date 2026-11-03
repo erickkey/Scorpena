@@ -292,6 +292,7 @@ enum Translations {
         "Звук запуска приложения": "App launch sound",
         "Выбор качества:": "Choose quality:",
         "Показать папку": "Show folder",
+        "Пять языков: русский, английский, китайский, хинди, испанский": "Five languages: Russian, English, Chinese, Hindi, Spanish",
         "Нашёл удобную программу для Mac: SCORPENA – video downloader. Она скачивает видео и аудио с YouTube, VK, Instagram, TikTok и ещё кучи сайтов в один клик. Вот ссылка на актуальную версию:": "Found a handy app for Mac: SCORPENA – video downloader. It downloads video and audio from YouTube, VK, Instagram, TikTok and loads of other sites in one click. Here is the link to the current version:",
         "Скопировать": "Copy",
         "Скачивает видео и звук: MP4, MOV, WebM, MKV, MP3, WAV, M4A": "Downloads video and audio: MP4, MOV, WebM, MKV, MP3, WAV, M4A",

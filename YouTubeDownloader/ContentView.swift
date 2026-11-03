@@ -239,61 +239,6 @@ struct ContentView: View {
             DispatchQueue.main.async {
                 runLaunchWindowSequenceWhenActive()
             }
-            // DEV-TEST-HOOK (remove before shipping): opens the clip window on a link.
-            // DEV-TEST-HOOK (remove before shipping): downloads a link and writes the bar's values to a file.
-            if let links = ProcessInfo.processInfo.environment["SCORPENA_AUTODL"] {
-                let logPath = ProcessInfo.processInfo.environment["SCORPENA_PROGRESS_LOG"]
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                    let dest = URL(fileURLWithPath: ProcessInfo.processInfo.environment["SCORPENA_TRIM_DIR"] ?? destinationURL.path)
-                    let audio = ProcessInfo.processInfo.environment["SCORPENA_AUTODL_AUDIO"] == "1"
-                    queue.submit(links.split(separator: " ").map { link in
-                        QueuedDownload(url: String(link), destination: dest, maxHeight: nil, audioOnly: audio,
-                                       stripAudio: false, videoFormat: .mp4, audioFormat: .mp3)
-                    })
-                    // "step@seconds": moves the speed slider that many seconds after the start.
-                    if let spec = ProcessInfo.processInfo.environment["SCORPENA_TEST_SPEED"]?.split(separator: "@"),
-                       spec.count == 2, let step = Int(spec[0]), let after = Double(spec[1]) {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + after) {
-                            UserDefaults.standard.set(step, forKey: SpeedLimit.key)
-                            for engine in DownloadQueue.shared.managers { engine.speedLimitChanged() }
-                        }
-                    }
-                    guard let logPath else { return }
-                    var lines = ""
-                    Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { timer in
-                        lines += String(format: "%.3f | %@ | %@\n", manager.progress, manager.statusLine, manager.lastDownloadedFile?.path ?? "-")
-                        try? lines.write(toFile: logPath, atomically: true, encoding: .utf8)
-                        if !manager.isRunning && manager.progress >= 1 { timer.invalidate() }
-                    }
-                }
-            }
-            // DEV-TEST-HOOK (remove before shipping): opens the named windows, e.g. "about,legal,whatsnew,language".
-            if let list = ProcessInfo.processInfo.environment["SCORPENA_OPEN"] {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                    for name in list.split(separator: ",") {
-                        switch name {
-                        case "about": InfoPanel.about.show()
-                        case "legal": InfoPanel.legal.show()
-                        case "feedback": InfoPanel.feedback.show()
-                        case "advanced": AdvancedSettingsPanel.shared.show(manager: manager)
-                        case "whatsnew": WhatsNewPanel.shared.show(version: "3.2", closeTitle: tr("Круто")) {}
-                        case "language": LanguagePickerPanel.shared.show {}
-                        default: break
-                        }
-                    }
-                }
-            }
-            if let tab = ProcessInfo.processInfo.environment["SCORPENA_OPEN_DOWNLOADS"] {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                    DownloadsPanel.shared.show(manager: manager, tab: tab == "history" ? .history : .queue) { _ in }
-                }
-            }
-            if let link = ProcessInfo.processInfo.environment["SCORPENA_TRIM_TEST"] {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                    LinkField.shared.text = link
-                    TrimPanel.shared.show(manager: manager)
-                }
-            }
         }
         .onChange(of: appearance) { _ in applyAppearance() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
@@ -554,6 +499,7 @@ struct ContentView: View {
         "3.2": [
             "## Новое",
             "Ножницы: можно вырезать из видео нужный кусок и скачать только его",
+            "Пять языков: русский, английский, китайский, хинди, испанский",
             "Светлая и тёмная тема",
             "Галочка «Открывать папку после загрузки»",
             "## Улучшения",

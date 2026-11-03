@@ -4,6 +4,7 @@ import Foundation
 // Texts missing here fall back to English (then Russian) — see `tr`.
 extension Translations {
     static let zh: [String: String] = [
+        "Пять языков: русский, английский, китайский, хинди, испанский": "五种语言：俄语、英语、中文、印地语、西班牙语",
         "Нашёл удобную программу для Mac: SCORPENA – video downloader. Она скачивает видео и аудио с YouTube, VK, Instagram, TikTok и ещё кучи сайтов в один клик. Вот ссылка на актуальную версию:": "发现了一个好用的 Mac 程序：SCORPENA – video downloader。它可以一键从 YouTube、VK、Instagram、TikTok 以及许多其他网站下载视频和音频。这是最新版本的链接：",
         "Скопировать": "复制",
         "Свернуть все": "全部收起",
@@ -305,6 +306,7 @@ extension Translations {
     ]
 
     static let hi: [String: String] = [
+        "Пять языков: русский, английский, китайский, хинди, испанский": "पाँच भाषाएं: रूसी, अंग्रेज़ी, चीनी, हिन्दी, स्पेनिश",
         "Нашёл удобную программу для Mac: SCORPENA – video downloader. Она скачивает видео и аудио с YouTube, VK, Instagram, TikTok и ещё кучи сайтов в один клик. Вот ссылка на актуальную версию:": "मुझे Mac के लिए एक काम का ऐप मिला: SCORPENA – video downloader। यह YouTube, VK, Instagram, TikTok और कई दूसरी साइटों से एक क्लिक में वीडियो और ऑडियो डाउनलोड करता है। नवीनतम संस्करण का लिंक यह है:",
         "Скопировать": "कॉपी करें",
         "Свернуть все": "सब समेटें",
@@ -606,6 +608,7 @@ extension Translations {
     ]
 
     static let es: [String: String] = [
+        "Пять языков: русский, английский, китайский, хинди, испанский": "Cinco idiomas: ruso, inglés, chino, hindi, español",
         "Нашёл удобную программу для Mac: SCORPENA – video downloader. Она скачивает видео и аудио с YouTube, VK, Instagram, TikTok и ещё кучи сайтов в один клик. Вот ссылка на актуальную версию:": "He encontrado una aplicación muy útil para Mac: SCORPENA – video downloader. Descarga vídeo y audio de YouTube, VK, Instagram, TikTok y un montón de sitios más con un solo clic. Aquí tienes el enlace a la versión actual:",
         "Скопировать": "Copiar",
         "Свернуть все": "Contraer todo",

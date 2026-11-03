@@ -279,17 +279,6 @@ final class TrimModel: ObservableObject {
             .sink { [weak self] status in self?.isPlaying = (status == .playing) }
             .store(in: &cancellables)
         phase = duration > 0 ? .ready : .failed(tr("Не получилось открыть ролик для просмотра."), diskAccess: false)
-        // DEV-TEST-HOOK (remove before shipping): marks a part and downloads it by itself.
-        if let marks = ProcessInfo.processInfo.environment["SCORPENA_TRIM_MARK"] {
-            let parts = marks.split(separator: ",").compactMap { Double($0) }
-            if parts.count == 2 { dragEnd(parts[1]); dragStart(parts[0]) }
-            if ProcessInfo.processInfo.environment["SCORPENA_TRIM_GO"] == "1" {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                    self.downloadClip(audioOnly: false, qualityHeight: 0, stripAudio: false,
-                                      destination: URL(fileURLWithPath: ProcessInfo.processInfo.environment["SCORPENA_TRIM_DIR"] ?? NSHomeDirectory()))
-                }
-            }
-        }
     }
 
     private func tick(_ time: Double) {
