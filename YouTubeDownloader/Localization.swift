@@ -536,7 +536,7 @@ enum Translations {
         "Перекодирую видео…": "Re-encoding the video…",
         "Перекодирую видео… %d%%": "Re-encoding the video… %d%%",
         "Сохраняю файл…": "Saving the file…",
-        "При поддержке Александра Семёнова (opragopa)": "With support from Alexander Semenov (opragopa)",
+        "При поддержке Александра Семенова (opragopa)": "With support from Alexander Semenov (opragopa)",
         "Очистить записи за %@?": "Clear entries for %@?",
         "Записи за %@ будут удалены из списка. Скачанные файлы не затрагиваются.": "Entries for %@ will be removed from the list. Your downloaded files are not touched.",
         "Очистить записи за %@": "Clear entries for %@",

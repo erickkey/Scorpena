@@ -1906,7 +1906,7 @@ struct AboutView: View {
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text("by Yaroslav Lukyanov")
-                    Text(tr("При поддержке Александра Семёнова (opragopa)"))
+                    Text(tr("При поддержке Александра Семенова (opragopa)"))
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
