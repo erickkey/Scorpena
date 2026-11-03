@@ -1293,7 +1293,7 @@ final class InfoPanel {
     static let legal = InfoPanel(title: "Правовая информация", size: NSSize(width: 520, height: 640)) {
         AnyView(LegalView(onClose: $0))
     }
-    static let feedback = InfoPanel(title: "Обратная связь", size: NSSize(width: 480, height: 380)) {
+    static let feedback = InfoPanel(title: "Обратная связь", size: NSSize(width: 480, height: 400)) {
         AnyView(FeedbackView(onClose: $0))
     }
 
@@ -1996,28 +1996,34 @@ struct FeedbackView: View {
                             .fieldStyle()
                     }
 
-                    if let cooldownNotice {
-                        Text(cooldownNotice)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    if sentNotice {
-                        Text(tr("Обращение отправлено"))
-                            .font(.caption)
-                            .foregroundStyle(.green)
-                    }
                 }
                 .padding(EdgeInsets(top: 22, leading: 24, bottom: 14, trailing: 24))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(AlwaysVisibleScroller())
             }
+            // The notices have their own place above the button, always there: they can never end up
+            // below the edge of the window.
+            Group {
+                if let cooldownNotice {
+                    Text(cooldownNotice).foregroundStyle(.secondary)
+                } else if sentNotice {
+                    Text(tr("Обращение отправлено")).foregroundStyle(.green)
+                } else {
+                    Text(" ")
+                }
+            }
+            .font(.caption)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, minHeight: 32, alignment: .center)
+            .padding(.horizontal, 24)
             Button(tr("Отправить")) { send() }
                 .buttonStyle(PrimaryPillStyle())
                 .keyboardShortcut(.defaultAction)
                 .disabled(message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .padding(.vertical, 16)
+                .padding(.bottom, 16)
         }
-        .frame(width: 480, height: 380)
+        .frame(width: 480, height: 400)
         .onAppear { cooldownNotice = nil; sentNotice = false }
     }
 
