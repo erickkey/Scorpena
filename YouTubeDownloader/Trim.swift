@@ -22,6 +22,8 @@ final class TrimPanel {
     private var closeObserver: NSObjectProtocol?
     private var keyMonitor: Any?
     private var clickMonitor: Any?
+    private var typingObserver: NSObjectProtocol?
+    private var releaseWork: DispatchWorkItem?
 
     func show(manager: DownloadManager) {
         NSApp.activate(ignoringOtherApps: true)
@@ -79,9 +81,26 @@ final class TrimPanel {
             win.makeFirstResponder(nil)
             return event
         }
+        // Two seconds after the link was pasted or changed the cursor leaves the link field by itself,
+        // so the keys work again. (The time fields only have digits, so they are not touched.)
+        typingObserver = NotificationCenter.default.addObserver(
+            forName: NSText.didChangeNotification, object: nil, queue: .main
+        ) { [weak self, weak win] note in
+            guard let self, let win, let text = note.object as? NSTextView, text === win.firstResponder,
+                  text.string.contains(where: { $0.isLetter }) else { return }
+            self.releaseWork?.cancel()
+            let work = DispatchWorkItem { [weak win] in
+                if let win, win.firstResponder is NSTextView { win.makeFirstResponder(nil) }
+            }
+            self.releaseWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: work)
+        }
         closeObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification, object: win, queue: .main
         ) { [weak self] _ in
+            self?.releaseWork?.cancel()
+            if let o = self?.typingObserver { NotificationCenter.default.removeObserver(o) }
+            self?.typingObserver = nil
             if let monitor = self?.keyMonitor { NSEvent.removeMonitor(monitor) }
             self?.keyMonitor = nil
             if let monitor = self?.clickMonitor { NSEvent.removeMonitor(monitor) }
