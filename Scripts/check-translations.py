@@ -4,7 +4,7 @@ punctuation follows the Russian original (dashes, question marks, ellipses)."""
 import glob, re, sys, os
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = os.path.join(ROOT, "YouTubeDownloader")
+SRC = os.path.join(ROOT, "Scorpena")
 loc = open(os.path.join(SRC, "Localization.swift"), encoding="utf-8").read()
 more = open(os.path.join(SRC, "TranslationsMore.swift"), encoding="utf-8").read()
 PAIR = r'^\s*"((?:[^"\\]|\\.)*)"\s*:\s*\n?\s*"((?:[^"\\]|\\.)*)"\s*,'

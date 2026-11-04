@@ -15,7 +15,7 @@ jobs:
       # The real file with the Telegram secrets is not in the repository: an empty stand-in is enough to compile.
       - name: Stand-in for the secrets file
         run: |
-          printf 'enum Secrets {\n    static let telegramBotToken = ""\n    static let telegramChatID = ""\n}\n' > YouTubeDownloader/Secrets.swift
+          printf 'enum Secrets {\n    static let telegramBotToken = ""\n    static let telegramChatID = ""\n}\n' > Scorpena/Secrets.swift
 
       - name: Run all checks
         run: sh Scripts/test.sh

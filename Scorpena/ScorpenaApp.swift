@@ -2,7 +2,7 @@ import SwiftUI
 import Combine
 
 @main
-struct YouTubeDownloaderApp: App {
+struct ScorpenaApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {

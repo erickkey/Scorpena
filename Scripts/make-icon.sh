@@ -5,7 +5,7 @@
 set -eu
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SRC="$HERE/icon-source.png"
-SET="$HERE/../YouTubeDownloader/Assets.xcassets/AppIcon.appiconset"
+SET="$HERE/../Scorpena/Assets.xcassets/AppIcon.appiconset"
 MASTER="$(mktemp -t iconmaster).png"
 
 swift "$HERE/make-icon.swift" "$SRC" "$MASTER"

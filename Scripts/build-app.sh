@@ -9,7 +9,7 @@ set -eu
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
-SRC="$ROOT/YouTubeDownloader"
+SRC="$ROOT/Scorpena"
 OUT="${1:-$HOME/Desktop}"
 APP="$OUT/Scorpena.app"
 SDK="$(xcrun --show-sdk-path)"

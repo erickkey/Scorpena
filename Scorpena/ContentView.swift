@@ -363,7 +363,7 @@ struct ContentView: View {
 
         // `target` is a *content* size — it mirrors the `idealWidth`/
         // `idealHeight` declared on ContentView's `.frame()` in
-        // YouTubeDownloaderApp.swift, which SwiftUI treats as content size,
+        // ScorpenaApp.swift, which SwiftUI treats as content size,
         // not the outer window frame. `setContentSize` maps that correctly;
         // writing it straight into `window.frame.size` used to leave the
         // content ~28pt (a title bar's height) short of its declared

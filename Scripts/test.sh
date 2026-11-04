@@ -1,6 +1,6 @@
 #!/bin/sh
 # Runs every check: the translations, then each test in Tests/ built together with the app's sources
-# (without the app's own entry point), each with its own data folder, so the real queue and history stay untouched. Needs YouTubeDownloader/Secrets.swift (an empty stand-in is fine).
+# (without the app's own entry point), each with its own data folder, so the real queue and history stay untouched. Needs Scorpena/Secrets.swift (an empty stand-in is fine).
 set -eu
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -12,7 +12,7 @@ failed=0
 echo "== translations"
 python3 Scripts/check-translations.py || failed=1
 
-SOURCES="$(ls YouTubeDownloader/*.swift | grep -v YouTubeDownloaderApp.swift)"
+SOURCES="$(ls Scorpena/*.swift | grep -v ScorpenaApp.swift)"
 for dir in Tests/*/; do
     name="$(basename "$dir")"
     echo "== $name"

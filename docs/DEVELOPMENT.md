@@ -82,7 +82,7 @@ yt-dlp, чтобы решать проверки YouTube).
 ## Сборка (без Xcode)
 
 Нужны только Command Line Tools (`xcode-select --install`) и интернет. Файл
-`YouTubeDownloader/Secrets.swift` (токен бота) не хранится в репозитории — его
+`Scorpena/Secrets.swift` (токен бота) не хранится в репозитории — его
 нужно создать:
 
 ```swift
@@ -107,7 +107,7 @@ yt-dlp (с проверкой SHA-256), ffmpeg и deno, подписывает a
 Проверка типов без сборки:
 
 ```bash
-swiftc -typecheck -sdk "$(xcrun --show-sdk-path)" -target arm64-apple-macosx13.0 YouTubeDownloader/*.swift
+swiftc -typecheck -sdk "$(xcrun --show-sdk-path)" -target arm64-apple-macosx13.0 Scorpena/*.swift
 ```
 
 ## Релиз
@@ -164,7 +164,7 @@ yt-dlp --newline --no-color --no-playlist --ffmpeg-location <dir> \
 
 | Файл | Назначение |
 |------|-----------|
-| `YouTubeDownloaderApp.swift` | точка входа, окно |
+| `ScorpenaApp.swift` | точка входа, окно |
 | `ContentView.swift` | весь основной UI, «Дополнительно», «О программе», обратная связь, проверка обновлений |
 | `DownloadManager.swift` | запуск `yt-dlp`/`ffmpeg`, разбор прогресса, пауза, докачка, повторы |
 | `DownloadSettings.swift` | форматы видео и звука, ограничение скорости, незавершённое скачивание |

@@ -3,7 +3,7 @@
 *.zip
 Scripts/icon-source.png
 _Source/
-YouTubeDownloader/Secrets.swift
+Scorpena/Secrets.swift
 
 # Local notes for Claude, not part of the public repository
 CLAUDE.md
