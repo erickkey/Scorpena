@@ -8,6 +8,20 @@ Scorpena – бесплатная программа для macOS. Достат�
 
 **[Скачать Scorpena.dmg](https://github.com/erickkey/Scorpena/releases/latest/download/Scorpena.dmg)**
 
+## Скриншоты
+
+<p align="center"><img src="images/ru-main.png" width="560" alt="Главное окно"></p>
+
+<table>
+  <tr>
+    <td align="center" width="50%"><img src="images/ru-downloads.png" alt="Очередь загрузок"><br><sub>Очередь загрузок</sub></td>
+    <td align="center" width="50%"><img src="images/ru-clip.png" alt="Вырезать фрагмент"><br><sub>Вырезать фрагмент</sub></td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2"><img src="images/ru-history.png" width="50%" alt="История скачиваний"><br><sub>История скачиваний</sub></td>
+  </tr>
+</table>
+
 ## Возможности
 
 **Загрузка.** Видео (MP4, MOV, WebM, MKV) и звук (MP3, WAV, M4A). Перед скачиванием показываются доступные варианты качества и размер файла. Скопированная ссылка подставляется в поле автоматически.
