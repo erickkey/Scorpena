@@ -1,26 +1,11 @@
-# Scorpena – video downloader
+<p align="center"><img src="docs/images/banner-en.png" alt="Scorpena – video downloader"></p>
 
 [**English**](README.md) · [Русский](docs/README.ru.md)
 
-*Downloading video and audio on Mac*
 
 Scorpena is a free program for macOS. Just paste a link to a video, and the program saves it to the Mac in the chosen format and quality. YouTube, VK, Instagram, TikTok, Vimeo and more than 1000 other sites are supported.
 
 **[Download Scorpena.dmg](https://github.com/erickkey/Scorpena/releases/latest/download/Scorpena.dmg)**
-
-## Screenshots
-
-<p align="center"><img src="docs/images/en-main.png" width="560" alt="Main window"></p>
-
-<table>
-  <tr>
-    <td align="center" width="50%"><img src="docs/images/en-downloads.png" alt="Download queue"><br><sub>Download queue</sub></td>
-    <td align="center" width="50%"><img src="docs/images/en-clip.png" alt="Cut a clip"><br><sub>Cut a clip</sub></td>
-  </tr>
-  <tr>
-    <td align="center" colspan="2"><img src="docs/images/en-history.png" width="50%" alt="History"><br><sub>History</sub></td>
-  </tr>
-</table>
 
 ## Features
 

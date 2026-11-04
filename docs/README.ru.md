@@ -1,26 +1,11 @@
-# Scorpena – video downloader
+<p align="center"><img src="images/banner-ru.png" alt="Scorpena – video downloader"></p>
 
 [English](../README.md) · **Русский**
 
-*Скачивание видео и звука на Mac*
 
 Scorpena – бесплатная программа для macOS. Достаточно вставить ссылку на видео, и программа сохранит его на Mac в выбранном формате и качестве. Поддерживаются YouTube, VK, Instagram, TikTok, Vimeo и более 1000 других сайтов.
 
 **[Скачать Scorpena.dmg](https://github.com/erickkey/Scorpena/releases/latest/download/Scorpena.dmg)**
-
-## Скриншоты
-
-<p align="center"><img src="images/ru-main.png" width="560" alt="Главное окно"></p>
-
-<table>
-  <tr>
-    <td align="center" width="50%"><img src="images/ru-downloads.png" alt="Очередь загрузок"><br><sub>Очередь загрузок</sub></td>
-    <td align="center" width="50%"><img src="images/ru-clip.png" alt="Вырезать фрагмент"><br><sub>Вырезать фрагмент</sub></td>
-  </tr>
-  <tr>
-    <td align="center" colspan="2"><img src="images/ru-history.png" width="50%" alt="История скачиваний"><br><sub>История скачиваний</sub></td>
-  </tr>
-</table>
 
 ## Возможности
 
