@@ -110,9 +110,6 @@ yt-dlp (с проверкой SHA-256), ffmpeg и deno, подписывает a
 swiftc -typecheck -sdk "$(xcrun --show-sdk-path)" -target arm64-apple-macosx13.0 YouTubeDownloader/*.swift
 ```
 
-(Файл `YouTubeDownloader.xcodeproj` остался от старой сборки через Xcode и не
-обновляется — новые файлы в нём не перечислены.)
-
 ## Релиз
 
 1. В `Scripts/build-app.sh` поднять `APP_VERSION`, в `ContentView.swift` добавить
