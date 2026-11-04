@@ -1,6 +1,6 @@
 # Scorpena – video downloader
 
-[**English**](README.md) · [Русский](README.ru.md)
+[**English**](README.md) · [Русский](docs/README.ru.md)
 
 *Downloading video and audio on Mac*
 
@@ -59,4 +59,4 @@ The program collects no personal data. Error reports and feedback are sent to th
 
 The program is free. Its development can be [supported](https://tips.tips/000490838).
 
-For developers: [DEVELOPMENT.md](DEVELOPMENT.md). Only download what you have the right to.
+For developers: [DEVELOPMENT.md](docs/DEVELOPMENT.md). Only download what you have the right to.

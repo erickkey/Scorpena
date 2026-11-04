@@ -1,6 +1,6 @@
 # Scorpena – video downloader
 
-[English](README.md) · **Русский**
+[English](../README.md) · **Русский**
 
 *Скачивание видео и звука на Mac*
 
