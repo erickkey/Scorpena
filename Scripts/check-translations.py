@@ -50,6 +50,15 @@ if block:
         for name in ("en", "zh", "hi", "es"):
             if text not in {k for k, _ in tables[name]}: problems.append(f"{name}: «Что нового» {ver} not translated: «{text[:50]}»")
 
+# a view that shows translated text has to watch the language, or it stays in the old language
+# when the language is changed while its window is open
+for path in sorted(glob.glob(os.path.join(SRC, "*.swift"))):
+    text = open(path, encoding="utf-8").read()
+    for part in re.split(r'\n(?=(?:private |fileprivate )?(?:final )?(?:struct|class|enum) \w+)', text):
+        m = re.match(r'(?:private |fileprivate )?(?:final )?(?:struct|class) (\w+)[^\n{]*?:\s*[^\n{]*\bView\b', part)
+        if m and re.search(r'\btrf?\(', part) and "LanguageSettings.shared" not in part:
+            problems.append(f"{os.path.basename(path)}: view {m.group(1)} shows translated text but does not watch the language (add @ObservedObject … = LanguageSettings.shared)")
+
 for p in problems: print("FAIL ", p)
 print("ALL OK" if not problems else f"FAILURES: {len(problems)}")
 sys.exit(1 if problems else 0)

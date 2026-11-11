@@ -2372,6 +2372,8 @@ struct MenuWindowOpeners: ViewModifier {
 struct AppUpdateBlock: View {
     @ObservedObject var checker: UpdateChecker
     @ObservedObject var manager: DownloadManager
+    /// The language can be changed with this window open: this row has to be redrawn in the new language too.
+    @ObservedObject private var language = LanguageSettings.shared
 
     private var current: String {
         (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "?"
