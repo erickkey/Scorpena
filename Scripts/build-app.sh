@@ -20,7 +20,7 @@ DENO_TAG="v2.9.8"   # JS engine yt-dlp needs to solve YouTube challenges
 
 # Bump this for every release that should trigger the in-app "update available"
 # notice (must match the "version" in version.json on GitHub).
-APP_VERSION="3.2.2"
+APP_VERSION="3.2.3"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/bin"
@@ -60,6 +60,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 	<key>CFBundlePackageType</key><string>APPL</string>
 	<key>CFBundleShortVersionString</key><string>${APP_VERSION}</string>
 	<key>CFBundleVersion</key><string>${APP_VERSION}</string>
+	<key>CFBundleLocalizations</key><array><string>ru</string><string>en</string><string>zh-Hans</string><string>hi</string><string>es</string></array>
 	<key>CFBundleIconFile</key><string>AppIcon</string>
 	<key>CFBundleIconName</key><string>AppIcon</string>
 	<key>LSMinimumSystemVersion</key><string>${DT}</string>

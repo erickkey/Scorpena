@@ -447,6 +447,7 @@ struct HistoryView: View {
                 .opacity(hoveredDay == day ? 1 : 0)
                 .allowsHitTesting(hoveredDay == day)
                 .help(trf("Очистить записи за %@", dayTitle(day).lowercased()))
+                .accessibilityLabel(trf("Очистить записи за %@", dayTitle(day).lowercased()))
             }
             if count > DownloadHistory.dayLimit {
                 Text(tr("За этот день больше 100 записей. Можно очистить."))
@@ -527,6 +528,7 @@ struct HistoryView: View {
                         }
                         .buttonStyle(.plain)
                         .help(FileReveal.buttonTitle(folder: item.isPlaylist))
+                        .accessibilityLabel(FileReveal.buttonTitle(folder: item.isPlaylist))
                     }
                     Button { history.remove(id: item.id) } label: {
                         Image(systemName: "xmark")
@@ -538,6 +540,7 @@ struct HistoryView: View {
                     }
                     .buttonStyle(.plain)
                     .help(tr("Удалить из истории"))
+                    .accessibilityLabel(tr("Удалить из истории"))
                 }
                 .padding(8)
                 .transition(.opacity)

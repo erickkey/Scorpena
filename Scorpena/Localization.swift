@@ -159,6 +159,8 @@ enum Translations {
         "Обратная связь": "Feedback",
         "Поделиться": "Share",
         "Поддержать": "Support",
+        "Справка": "Help",
+        "Что нового": "What's new",
         "Программа бесплатная. Если она тебе пригодилась, можно поддержать её развитие.": "The app is free. If you find it useful, you can support its development.",
         "Доступно обновление": "Update available",
 
@@ -212,8 +214,13 @@ enum Translations {
         // MARK: Advanced settings window
         "Закрыть": "Close",
         "Уведомления": "Notifications",
-        "Обновление встроенных инструментов": "Built-in tools update",
+        "Обновление внутренних инструментов": "Built-in tools update",
+        "Обновление программы": "App update",
+        "Версия %@.": "Version %@.",
         "Обновить": "Update",
+        "Обновления": "Updates",
+        "Версия %@. Доступна новая: %@.": "Version %@. A new one is available: %@.",
+        "Версия %@. У тебя последняя.": "Version %@. You have the latest.",
         "Язык": "Language",
 
         // MARK: What's New
@@ -346,6 +353,10 @@ enum Translations {
         "**Значки и окна:** новые значки, закрытие на Esc": "**Icons and windows:** new icons, closing with Esc",
         "**Ограничение скорости:** смена во время скачивания больше не сбрасывает загрузку": "**Speed limit:** changing it during a download no longer resets the download",
         "**Стабильность:** общие улучшения": "**Stability:** general improvements",
+        "**Обновление программы:** заметная полоса с кнопкой «Обновить» вверху окна": "**App update:** a prominent bar with an “Update” button at the top of the window",
+        "**Настройки:** раздел «Обновления». Обновление программы и обновление внутренних инструментов теперь разделены": "**Settings:** the “Updates” section. Updating the app and updating the built-in tools are now separate",
+        "**Меню:** упрощённый состав пунктов, сочетания клавиш работают": "**Menu:** a simplified set of items, keyboard shortcuts work",
+        "**Исправления и улучшения:** устранение ошибок, повышение стабильности": "**Fixes and improvements:** bug fixes, better stability",
         "Этот отрывок уже скачивается или стоит в очереди": "This clip is already downloading or waiting in the queue",
         "Файл уже скачан": "File already downloaded",
         "Плейлист не найден": "Playlist not found",

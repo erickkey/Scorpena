@@ -928,6 +928,7 @@ private struct CardButton: View {
         }
         .buttonStyle(.plain)
         .help(help)
+        .accessibilityLabel(help.isEmpty ? (title ?? "") : help)   // read out in the app's language
     }
 }
 

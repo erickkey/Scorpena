@@ -8,7 +8,8 @@ struct ContentView: View {
     @ObservedObject private var queue = DownloadQueue.shared
     @StateObject private var updateChecker = UpdateChecker()
     @StateObject private var windowFitter = MainWindowFitter()
-    @State private var updateGlow = false
+    /// «Позже» on the update bar: it stays hidden until the next launch.
+    @State private var updateBarDismissed = false
     @State private var showAccessHint = false
     @State private var playlistStatus: String?
     @AppStorage("accessHintShown") private var accessHintShown = false
@@ -159,6 +160,7 @@ struct ContentView: View {
                 })
         }
         .onPreferenceChange(ContentHeightKey.self) { windowFitter.fit(toContent: $0) }
+        .modifier(MenuWindowOpeners(manager: manager, urlString: $urlString))
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button {
@@ -178,6 +180,7 @@ struct ContentView: View {
                         }
                 }
                 .help(tr("Очередь загрузок"))
+                .accessibilityLabel(tr("Очередь загрузок"))
                 .buttonStyle(.plain)   // the icons keep one colour: no system highlight on hover
                 // History is its own button: the same window, opened on its own tab.
                 Button {
@@ -186,6 +189,7 @@ struct ContentView: View {
                     ToolbarIcon(name: "history")
                 }
                 .help(tr("История скачиваний"))
+                .accessibilityLabel(tr("История скачиваний"))
                 .buttonStyle(.plain)   // the icons keep one colour: no system highlight on hover
                 Button {
                     TrimPanel.shared.show(manager: manager)
@@ -193,6 +197,7 @@ struct ContentView: View {
                     ToolbarIcon(name: "scissors")
                 }
                 .help(tr("Вырезать фрагмент"))
+                .accessibilityLabel(tr("Вырезать фрагмент"))
                 .buttonStyle(.plain)   // the icons keep one colour: no system highlight on hover
                 Button {
                     AdvancedSettingsPanel.shared.show(manager: manager)
@@ -200,6 +205,7 @@ struct ContentView: View {
                     ToolbarIcon(name: "settings")
                 }
                 .help(tr("Дополнительно"))
+                .accessibilityLabel(tr("Дополнительно"))
                 .buttonStyle(.plain)   // the icons keep one colour: no system highlight on hover
                 // Sun or moon, whichever you would switch to. Until the first press the app simply
                 // follows the system's theme (the icon follows it too).
@@ -209,6 +215,7 @@ struct ContentView: View {
                     ToolbarIcon(name: colorScheme == .dark ? "sun" : "moon")
                 }
                 .help(tr("Светлая / тёмная тема"))
+                .accessibilityLabel(tr("Светлая / тёмная тема"))
                 .buttonStyle(.plain)   // the icons keep one colour: no system highlight on hover
             }
         }
@@ -228,6 +235,7 @@ struct ContentView: View {
                 qualityHeight = 0
             }
             AdvancedSettingsPanel.shared.manager = manager
+            AdvancedSettingsPanel.shared.updateChecker = updateChecker
             queue.attach(manager)
             if queue.batchActive { batchStartTime = Date() }
             Cleanup.checkOnLaunch(queue: queue)
@@ -265,8 +273,41 @@ struct ContentView: View {
         }
     }
 
+    /// A new version of the app: blue text (like the links), one thin line under it, «Обновить» and a cross for «not now».
+    private var updateBar: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 12) {
+                Text(trf("Вышла новая версия %@", updateChecker.latestVersion ?? ""))
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(Color(nsColor: .linkColor))   // the same blue as the links at the bottom
+                Spacer(minLength: 8)
+                Button(tr("Обновить")) {
+                    updateChecker.startUpdate(downloadInProgress: manager.isRunning)
+                }
+                .buttonStyle(SoftPillStyle(compact: true))
+                .disabled(updateChecker.installState != .idle)
+                Button {
+                    updateBarDismissed = true
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(tr("Позже"))
+                .accessibilityLabel(tr("Позже"))
+                .disabled(updateChecker.installState != .idle)
+            }
+            Divider()
+        }
+        .frame(maxWidth: 560)
+    }
+
     private func mainContent(spacing: CGFloat) -> some View {
         VStack(spacing: 18) {
+            if updateChecker.updateAvailable && !updateBarDismissed { updateBar }
             brandRow
             VStack(spacing: 14) {
                 urlField
@@ -503,6 +544,13 @@ struct ContentView: View {
 
     /// Lines starting with «## » are section headings (Новое / Улучшения / Исправлено), the rest are bullets.
     static let changelog: [String: [String]] = [
+        "3.2.3": [
+            "## Улучшения",
+            "**Обновление программы:** заметная полоса с кнопкой «Обновить» вверху окна",
+            "**Настройки:** раздел «Обновления». Обновление программы и обновление внутренних инструментов теперь разделены",
+            "**Меню:** упрощённый состав пунктов, сочетания клавиш работают",
+            "**Исправления и улучшения:** устранение ошибок, повышение стабильности",
+        ],
         "3.2.2": [
             "## Внеплановое обновление",
             "Исправление критических ошибок",
@@ -677,25 +725,6 @@ struct ContentView: View {
 
     private var footerSignature: some View {
         VStack(alignment: .trailing, spacing: 3) {
-            if updateChecker.updateAvailable {
-                Button {
-                    updateChecker.startUpdate(downloadInProgress: manager.isRunning)
-                } label: {
-                    Text(tr("Доступно обновление") + (updateChecker.latestVersion.map { " (\($0))" } ?? ""))
-                        .font(.caption2.bold())
-                        .foregroundStyle(updateChecker.installState != .idle || updateGlow
-                                         ? Color.secondary : Color.red)
-                }
-                .buttonStyle(.plain)
-                .disabled(updateChecker.installState != .idle)
-                .onAppear {
-                    // Slow on purpose (about 3 s per red→gray→red cycle): it
-                    // should catch the eye without nagging.
-                    withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
-                        updateGlow = true
-                    }
-                }
-            }
             Text("by Yaroslav Lukyanov")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
@@ -1368,6 +1397,8 @@ final class AdvancedSettingsPanel {
     private var window: NSWindow?
     /// Set by the main window, so other windows («О программе») can open this one too.
     weak var manager: DownloadManager?
+    /// Set by the main window too: the settings show the app's update state.
+    weak var updateChecker: UpdateChecker?
 
     func show() {
         if let manager { show(manager: manager) }
@@ -1383,7 +1414,7 @@ final class AdvancedSettingsPanel {
             return
         }
         let hosting = NSHostingController(
-            rootView: AdvancedSettingsView(manager: manager, onClose: { [weak self] in self?.window?.close() })
+            rootView: AdvancedSettingsView(manager: manager, updateChecker: updateChecker, onClose: { [weak self] in self?.window?.close() })
         )
         let win = NSWindow(contentViewController: hosting)
         win.styleMask = [.titled, .closable]
@@ -1400,6 +1431,7 @@ final class AdvancedSettingsPanel {
 
 struct AdvancedSettingsView: View {
     @ObservedObject var manager: DownloadManager
+    var updateChecker: UpdateChecker?
     var onClose: () -> Void
 
     @AppStorage("muteChime") private var muteChime = false
@@ -1420,7 +1452,7 @@ struct AdvancedSettingsView: View {
                 speedBlock.card()
                 openFolderBlock.card()
                 cleanupBlock.card()
-                toolsBlock.card()
+                updatesBlock.card()
                 languageBlock.card()
                 diagnosticsBlock.card()
             }
@@ -1519,9 +1551,22 @@ struct AdvancedSettingsView: View {
         }
     }
 
+    /// One block for everything that updates: the app itself, and the downloader inside it.
+    private var updatesBlock: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(tr("Обновления")).font(.callout.bold())
+            if let updateChecker {
+                Text(tr("Обновление программы")).font(.subheadline.weight(.medium))
+                AppUpdateBlock(checker: updateChecker, manager: manager)
+                Divider()
+            }
+            Text(tr("Обновление внутренних инструментов")).font(.subheadline.weight(.medium))
+            toolsBlock
+        }
+    }
+
     private var toolsBlock: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(tr("Обновление встроенных инструментов")).font(.callout.bold())
             Text(tr("Программа скачивает видео с помощью внутренних инструментов и сама их обновляет. Если видео перестало скачиваться, нажми «Проверить сейчас»."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -2161,6 +2206,8 @@ final class UpdateChecker: ObservableObject {
     enum InstallState: Equatable { case idle, installing }
 
     @Published private(set) var updateAvailable = false
+    /// True once the server has really answered: «you have the latest» is only said after that.
+    @Published private(set) var checkSucceeded = false
     @Published private(set) var latestVersion: String?
     @Published private(set) var installState: InstallState = .idle
 
@@ -2206,6 +2253,7 @@ final class UpdateChecker: ObservableObject {
                   let remote = json["version"] as? String
             else { return }
 
+            self.checkSucceeded = true
             if Self.isNewer(remote, than: currentVersion) {
                 self.latestVersion = remote
                 self.updateAvailable = true
@@ -2289,5 +2337,63 @@ final class UpdateChecker: ObservableObject {
             if x != y { return x > y }
         }
         return false
+    }
+}
+
+
+extension Notification.Name {
+    static let scorpenaOpenQueue = Notification.Name("scorpenaOpenQueue")
+    static let scorpenaOpenHistory = Notification.Name("scorpenaOpenHistory")
+    static let scorpenaOpenTrim = Notification.Name("scorpenaOpenTrim")
+}
+
+/// The same windows the toolbar buttons open, now also from the menu bar and its keys.
+struct MenuWindowOpeners: ViewModifier {
+    let manager: DownloadManager
+    @Binding var urlString: String
+
+    func body(content: Content) -> some View {
+        content
+            .onReceive(NotificationCenter.default.publisher(for: .scorpenaOpenQueue)) { _ in
+                DownloadsPanel.shared.show(manager: manager, tab: .queue) { picked in urlString = picked }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .scorpenaOpenHistory)) { _ in
+                DownloadsPanel.shared.show(manager: manager, tab: .history) { picked in urlString = picked }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .scorpenaOpenTrim)) { _ in
+                TrimPanel.shared.show(manager: manager)
+            }
+    }
+}
+
+
+/// The app's own update state, the first row of the «Обновления» block in the settings
+/// (the second row is the downloader inside the app).
+struct AppUpdateBlock: View {
+    @ObservedObject var checker: UpdateChecker
+    @ObservedObject var manager: DownloadManager
+
+    private var current: String {
+        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "?"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                if checker.updateAvailable {
+                    // Laid out like the downloader's row below: the button first, the text to its right.
+                    Button(tr("Обновить")) { checker.startUpdate(downloadInProgress: manager.isRunning) }
+                        .buttonStyle(SoftPillStyle(compact: true))
+                        .disabled(checker.installState != .idle)
+                    Text(trf("Версия %@. Доступна новая: %@.", current, checker.latestVersion ?? ""))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(checker.checkSucceeded ? trf("Версия %@. У тебя последняя.", current) : trf("Версия %@.", current))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
     }
 }
