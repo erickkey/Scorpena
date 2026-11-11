@@ -88,5 +88,24 @@ check(c.progress > 0.8, "clip bar reaches the end of its range: \(c.progress)")
 check(!c.canPause, "a clip cannot be paused")
 check(!c.pausable, "a clip has no pause button")
 
+// --- a link to an ordinary file (not a video)
+let fileLinkLog = """
+[generic] Extracting URL: https://example.com/Scorpena.dmg
+WARNING: [generic] URL could be a direct video link, returning it as such.
+[download] 0263df20 does not pass filter (ext != unknown_video), skipping ..
+[info] Encountered a video that did not match filter, stopping due to --break-match-filter
+"""
+let fileLinkOldLog = """
+[generic] Extracting URL: https://example.com/Scorpena.dmg
+WARNING: [generic] URL could be a direct video link, returning it as such.
+[download] 100% of  174.94MiB
+ERROR: Postprocessing: file:/tmp/x.unknown_video: Invalid data found when processing input
+"""
+check(DownloadManager.friendlyDownloadError(in: fileLinkLog)?.contains("нет видео или аудио") == true, "a link to a file: «нет видео или аудио»")
+check(DownloadManager.friendlyDownloadError(in: fileLinkOldLog)?.contains("нет видео или аудио") == true, "a link to a file (late failure): «нет видео или аудио»")
+check(DownloadManager.friendlyDownloadError(in: "ERROR: Unsupported URL: https://example.com/") != nil
+      && DownloadManager.friendlyDownloadError(in: "ERROR: Unsupported URL: https://example.com/")?.contains("нет видео или аудио") == false, "unsupported link keeps its own message")
+check(DownloadManager.friendlyDownloadError(in: "[generic] URL could be a direct video link\n[download] 100% of 5MiB") == nil, "a direct video link that downloaded fine is no error")
+
 print(failures == 0 ? "ALL OK" : "FAILURES: \(failures)")
 exit(failures == 0 ? 0 : 1)

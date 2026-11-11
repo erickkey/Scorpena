@@ -24,5 +24,21 @@ check(ContentView.formatBytes(1_500_000) == "1,5 МБ".replacingOccurrences(of: 
 for (language, voice) in [(AppLanguage.ru, ""), (.en, "EN"), (.zh, "CN"), (.hi, "HI"), (.es, "ES")] {
     check(language.voiceSuffix == voice, "\(language.rawValue): voice file suffix «\(voice)»")
 }
+
+// the message for a link that is not a video: translated everywhere, and an error already on screen follows a language change
+let notVideoRu = "Здесь нет видео или аудио. Нужна другая ссылка."
+var notVideoShown: [String: String] = [:]
+for language in AppLanguage.allCases {
+    LanguageSettings.shared.language = language
+    notVideoShown[language.rawValue] = tr(notVideoRu)
+    check(language == .ru || tr(notVideoRu) != notVideoRu, "\(language.rawValue): «not a video» message is translated")
+}
+LanguageSettings.shared.language = .es
+check(retranslated(notVideoShown["en"]!) == notVideoShown["es"], "«not a video» message on screen goes from English to Spanish")
+LanguageSettings.shared.language = .zh
+check(retranslated(notVideoShown["hi"]!) == notVideoShown["zh"], "«not a video» message on screen goes from Hindi to Chinese")
+LanguageSettings.shared.language = .ru
+check(retranslated(notVideoShown["es"]!) == notVideoRu, "«not a video» message on screen goes from Spanish back to Russian")
+
 print(fails == 0 ? "ALL OK" : "FAILURES: \(fails)")
 exit(fails == 0 ? 0 : 1)

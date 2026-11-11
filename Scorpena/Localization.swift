@@ -533,6 +533,7 @@ enum Translations {
             "Video unavailable (removed, private, or blocked in your region).",
         "Ссылка не распознана или сайт не поддерживается. Нужен прямой адрес страницы видео (YouTube, VK и т.д.).":
             "Link not recognized or the site isn't supported. A direct video page URL is needed (YouTube, VK, etc.).",
+        "Здесь нет видео или аудио. Нужна другая ссылка.": "There is no video or audio here. A different link is needed.",
         "Не нашёлся формат под выбранное качество. Попробуй «Максимальное».":
             "No format found for the selected quality. Try “Best”.",
         "YouTube отклонил загрузку (403). Открой «Дополнительно» → «Проверить сейчас», затем повтори. Или попробуй другую ссылку.":

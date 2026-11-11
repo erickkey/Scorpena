@@ -283,6 +283,7 @@ final class TrimModel: ObservableObject {
         p.executableURL = URL(fileURLWithPath: ytDlp)
         p.arguments = [
             "--newline", "--no-color", "--no-playlist", "--no-simulate", "--progress",
+            "--break-match-filters", "ext != unknown_video",   // a link to an ordinary file is not a video
             "--ffmpeg-location", ffmpegDir,
             "--retries", "10", "--socket-timeout", "20", "--concurrent-fragments", "5",
             "--print", "before_dl:SCORPENA_TITLE|%(title)s",

@@ -743,6 +743,9 @@ final class DownloadManager: ObservableObject {
             "--newline",
             "--no-color",
             "--no-playlist",
+            // A link to an ordinary file (an installer, an archive) comes back from yt-dlp as «unknown_video»:
+            // stop before anything is downloaded.
+            "--break-match-filters", "ext != unknown_video",
             "--ffmpeg-location", ffmpegDir,
             // Pull DASH/HLS fragments in parallel — big speed-up for Vimeo etc.
             // (With a speed limit, one at a time: yt-dlp applies the limit to each
@@ -1679,6 +1682,12 @@ final class DownloadManager: ObservableObject {
         }
         if l.contains("is not a valid url") || l.contains("unsupported url") {
             return tr("Ссылка не распознана или сайт не поддерживается. Нужен прямой адрес страницы видео (YouTube, VK и т.д.).")
+        }
+        // A direct link to something that is not a video (an installer, an archive): yt-dlp downloads the whole
+        // file as «a direct video link», and then fails when it is turned into a video.
+        if l.contains("[generic]"), l.contains("could be a direct video link"),
+           l.contains("did not match filter") || l.contains("postprocessing") || l.contains("invalid data found") {
+            return tr("Здесь нет видео или аудио. Нужна другая ссылка.")
         }
         if l.contains("requested format is not available") {
             return tr("Не нашёлся формат под выбранное качество. Попробуй «Максимальное».")
