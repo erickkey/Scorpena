@@ -555,3 +555,73 @@ struct DotsSpinner: View {
         .frame(width: size, height: size)
     }
 }
+
+/// The GitHub mark (the Octicons «mark-github» outline, 16-unit grid), drawn as a filled shape.
+struct GitHubMark: Shape {
+    func path(in rect: CGRect) -> Path {
+        let s = min(rect.width, rect.height) / 16
+        let ox = rect.minX + (rect.width - 16 * s) / 2
+        let oy = rect.minY + (rect.height - 16 * s) / 2
+        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: ox + x * s, y: oy + y * s) }
+        var path = Path()
+        var x: CGFloat = 0, y: CGFloat = 0
+        func curve(_ a: CGFloat, _ b: CGFloat, _ c: CGFloat, _ d: CGFloat, _ e: CGFloat, _ f: CGFloat) {
+            path.addCurve(to: p(x + e, y + f), control1: p(x + a, y + b), control2: p(x + c, y + d))
+            x += e; y += f
+        }
+        x = 8; y = 0; path.move(to: p(x, y))
+        curve(-4.42, 0, -8, 3.58, -8, 8)                       // C3.58 0 0 3.58 0 8
+        curve(0, 3.54, 2.29, 6.53, 5.47, 7.59)
+        curve(0.4, 0.07, 0.55, -0.17, 0.55, -0.38)
+        curve(0, -0.19, -0.01, -0.82, -0.01, -1.49)
+        curve(-2.01, 0.37, -2.53, -0.49, -2.69, -0.94)
+        curve(-0.09, -0.23, -0.48, -0.94, -0.82, -1.13)
+        curve(-0.28, -0.15, -0.68, -0.52, -0.01, -0.53)
+        curve(0.63, -0.01, 1.08, 0.58, 1.23, 0.82)
+        curve(0.72, 1.21, 1.87, 0.87, 2.33, 0.66)
+        curve(0.07, -0.52, 0.28, -0.87, 0.51, -1.07)
+        curve(-1.78, -0.2, -3.64, -0.89, -3.64, -3.95)
+        curve(0, -0.87, 0.31, -1.59, 0.82, -2.15)
+        curve(-0.08, -0.2, -0.36, -1.02, 0.08, -2.12)
+        curve(0, 0, 0.67, -0.21, 2.2, 0.82)
+        curve(0.64, -0.18, 1.32, -0.27, 2, -0.27)
+        curve(0.68, 0, 1.36, 0.09, 2, 0.27)
+        curve(1.53, -1.04, 2.2, -0.82, 2.2, -0.82)
+        curve(0.44, 1.1, 0.16, 1.92, 0.08, 2.12)
+        curve(0.51, 0.56, 0.82, 1.27, 0.82, 2.15)
+        curve(0, 3.07, -1.87, 3.75, -3.65, 3.95)
+        curve(0.29, 0.25, 0.54, 0.73, 0.54, 1.48)
+        curve(0, 1.07, -0.01, 1.93, -0.01, 2.2)
+        curve(0, 0.21, 0.15, 0.46, 0.55, 0.38)
+        // The closing arc (radius 8, centre 8 8) up to (16, 8), then the right half back to the start.
+        let from = atan2(y - 8, x - 8) * 180 / .pi
+        path.addArc(center: p(8, 8), radius: 8 * s, startAngle: .degrees(Double(from)),
+                    endAngle: .degrees(0), clockwise: true)
+        path.addArc(center: p(8, 8), radius: 8 * s, startAngle: .degrees(0),
+                    endAngle: .degrees(-90), clockwise: true)
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// The small GitHub link in the top right corner of the main window. The same size and colour as the
+/// toolbar icons, and its centre sits exactly under the last toolbar icon (the sun / moon).
+struct GitHubLinkButton: View {
+    static let url = URL(string: "https://github.com/erickkey/Scorpena")!
+    @ObservedObject private var language = LanguageSettings.shared
+    @State private var hovering = false
+
+    var body: some View {
+        Button { NSWorkspace.shared.open(Self.url) } label: {
+            GitHubMark()
+                .frame(width: 17, height: 17)          // a filled mark looks bigger than a line icon: 17 of 20
+                .frame(width: 20, height: 20)          // the toolbar icons' box
+                .foregroundStyle(Color.primary.opacity(hovering ? 0.9 : 0.62))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help(tr("Проект на GitHub"))
+        .accessibilityLabel(tr("Проект на GitHub"))
+    }
+}

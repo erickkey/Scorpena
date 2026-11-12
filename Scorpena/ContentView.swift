@@ -160,6 +160,10 @@ struct ContentView: View {
                 })
         }
         .onPreferenceChange(ContentHeightKey.self) { windowFitter.fit(toContent: $0) }
+        .overlay(alignment: .topTrailing) {
+            // The centre of the icon is 22.5 pt from the window's edge: exactly under the sun / moon.
+            GitHubLinkButton().padding(.top, 8).padding(.trailing, 12.5)
+        }
         .modifier(MenuWindowOpeners(manager: manager, urlString: $urlString))
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
