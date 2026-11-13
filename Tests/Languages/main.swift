@@ -41,4 +41,19 @@ LanguageSettings.shared.language = .ru
 check(retranslated(notVideoShown["es"]!) == notVideoRu, "«not a video» message on screen goes from Spanish back to Russian")
 
 print(fails == 0 ? "ALL OK" : "FAILURES: \(fails)")
+// the message for a video closed in the viewer's country: translated everywhere, follows a language change on screen
+let geoRu = "Это видео недоступно в твоей стране. Включи VPN или поменяй в нём страну и попробуй ещё раз."
+var geoShown: [String: String] = [:]
+for language in AppLanguage.allCases {
+    LanguageSettings.shared.language = language
+    geoShown[language.rawValue] = tr(geoRu)
+    check(language == .ru || tr(geoRu) != geoRu, "\(language.rawValue): «geo block» message is translated")
+}
+for from in AppLanguage.allCases {
+    for to in AppLanguage.allCases where from != to {
+        LanguageSettings.shared.language = to
+        check(retranslated(geoShown[from.rawValue]!) == geoShown[to.rawValue], "«geo block» on screen: \(from.rawValue) → \(to.rawValue)")
+    }
+}
+
 exit(fails == 0 ? 0 : 1)
