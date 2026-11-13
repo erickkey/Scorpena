@@ -227,7 +227,7 @@ enum Translations {
         "Круто": "Cool",
         "Список изменений": "What's New",
         "Проект на GitHub": "Project on GitHub",
-        "Это видео недоступно в твоей стране. Включи VPN и попробуй ещё раз.": "This video is not available in your country. Turn on a VPN and try again.",
+        "Это видео недоступно в твоей стране. Включи VPN или поменяй в нём страну и попробуй ещё раз.": "This video is not available in your country. Turn on a VPN or change its country, then try again.",
         "Сейчас идёт скачивание": "A download is in progress",
         "Отчёты о сбоях": "Crash reports",
         "Программа скачивает видео с помощью внутренних инструментов и сама их обновляет. Если видео перестало скачиваться, нажми «Проверить сейчас».":
