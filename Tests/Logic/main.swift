@@ -105,6 +105,9 @@ check(DownloadManager.friendlyDownloadError(in: fileLinkLog)?.contains("нет �
 check(DownloadManager.friendlyDownloadError(in: fileLinkOldLog)?.contains("нет видео или аудио") == true, "a link to a file (late failure): «нет видео или аудио»")
 check(DownloadManager.friendlyDownloadError(in: "ERROR: Unsupported URL: https://example.com/") != nil
       && DownloadManager.friendlyDownloadError(in: "ERROR: Unsupported URL: https://example.com/")?.contains("нет видео или аудио") == false, "unsupported link keeps its own message")
+let geoLog = "ERROR: [youtube] xnP7qKxwzjg: The uploader has not made this video available in your country. This video is available in this country list: Spain, France.\nYou might want to use a VPN or a proxy server (with --proxy) to workaround."
+check(DownloadManager.friendlyDownloadError(in: geoLog)?.contains("недоступно в твоей стране") == true, "geo block: «недоступно в твоей стране»")
+check(DownloadManager.friendlyDownloadError(in: "ERROR: Video unavailable")?.contains("недоступно в твоей стране") == false, "plain unavailable keeps its own message")
 check(DownloadManager.friendlyDownloadError(in: "[generic] URL could be a direct video link\n[download] 100% of 5MiB") == nil, "a direct video link that downloaded fine is no error")
 
 print(failures == 0 ? "ALL OK" : "FAILURES: \(failures)")

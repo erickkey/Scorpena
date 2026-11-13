@@ -1677,6 +1677,11 @@ final class DownloadManager: ObservableObject {
     static func friendlyDownloadError(in log: String) -> String? {
         let l = log.lowercased()
 
+        // Closed for the viewer's country (yt-dlp prints the list of countries where it is open, then advises a VPN).
+        if l.contains("available in your country") || l.contains("geo restriction") || l.contains("geo-restrict")
+            || l.contains("use a vpn or a proxy") {
+            return tr("Это видео недоступно в твоей стране. Включи VPN и попробуй ещё раз.")
+        }
         if l.contains("video unavailable") || l.contains("this video is not available") {
             return tr("Видео недоступно (удалено, приватное или заблокировано в твоём регионе).")
         }
