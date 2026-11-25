@@ -198,10 +198,11 @@ final class ToolAutoUpdater {
             return .keptOld(current: current, rejected: latest)
         }
         if !canary(candidate) {
+            let whyFailed = lastCanaryFailure      // what the new build said, before the old one is tried
             if canary(ytDlp) {
                 log("\(latest) failed the self-check but \(current) works — keeping \(current)")
                 DiagnosticReporter.report(.ytDlpRolledBack,
-                    details: "yt-dlp \(latest) не прошёл самопроверку на YouTube, а \(current) работает — остаётся \(current).")
+                    details: "yt-dlp \(latest) не прошёл самопроверку на YouTube, а \(current) работает — остаётся \(current).\nЧто ответила новая версия:\n\(whyFailed)")
                 defaults.set(latest, forKey: skippedVersionKey)
                 return .keptOld(current: current, rejected: latest)
             }
@@ -228,11 +229,23 @@ final class ToolAutoUpdater {
         return .updated(from: current, to: latest)
     }
 
+    /// The last lines a failed self-check printed (links removed), so a report says why and not only that.
+    private var lastCanaryFailure = ""
+
     private func canary(_ binary: String) -> Bool {
         let args = ["--no-warnings", "--no-playlist", "--skip-download", "--print", "%(title)s"]
             + DownloadManager.jsRuntimeArgs() + [Self.canaryURL]
-        guard let result = Self.run(binary, args, timeout: 90) else { return false }
-        return result.status == 0 && !result.output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard let result = Self.run(binary, args, timeout: 90) else {
+            lastCanaryFailure = "не удалось запустить"
+            return false
+        }
+        let ok = result.status == 0 && !result.output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        if !ok {
+            let tail = result.output.split(separator: "\n").suffix(4).joined(separator: "\n")
+            lastCanaryFailure = "код \(result.status): " + String(tail
+                .replacingOccurrences(of: #"https?://\S+"#, with: "<ссылка>", options: .regularExpression).prefix(600))
+        }
+        return ok
     }
 
     // MARK: Swap / rollback

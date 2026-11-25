@@ -88,9 +88,11 @@ enum DiagnosticReporter {
                .trimmingCharacters(in: .whitespacesAndNewlines), !v.isEmpty {
             ytDlp = v
         }
-        let deno = ToolLocator.bundledBinDirectory.map {
-            FileManager.default.isExecutableFile(atPath: $0 + "/deno") ? "есть" : "нет"
-        } ?? "нет"
+        // «Работает» only when it was really started and answered; the file lying there proves nothing.
+        let deno: String
+        if let works = denoWorks { deno = works ? "работает" : "НЕ запускается" }
+        else if ToolLocator.bundledBinDirectory.map({ FileManager.default.isExecutableFile(atPath: $0 + "/deno") }) == true { deno = "файл есть, запуск не проверен" }
+        else { deno = "нет" }
         return "Scorpena \(app) · macOS \(os.majorVersion).\(os.minorVersion).\(os.patchVersion) · \(arch)\n"
             + "yt-dlp \(ytDlp) · deno \(deno) · установка #\(installID)"
     }
@@ -176,7 +178,9 @@ enum DiagnosticReporter {
                     problems.append("\(name): файла нет или нет права на запуск")
                     continue
                 }
-                switch runBriefly(path, [argument], timeout: 30) {
+                let result = runBriefly(path, [argument], timeout: 30)
+                if name == "deno" { denoWorks = (result != nil && !(result!.killedBySignal) && result!.status == 0) }
+                switch result {
                 case .none:                  problems.append("\(name): не удалось запустить")
                 case .some(let r) where r.killedBySignal: problems.append("\(name): убит системой (сигнал \(r.status))")
                 case .some(let r) where r.status != 0:    problems.append("\(name): код выхода \(r.status)")
@@ -186,6 +190,9 @@ enum DiagnosticReporter {
             if !problems.isEmpty { report(.toolBroken, details: problems.joined(separator: "\n")) }
         }
     }
+
+    /// Set by `checkBundledTools` once deno has really been run.
+    private(set) static var denoWorks: Bool?
 
     private struct RunResult { let status: Int32; let killedBySignal: Bool }
 

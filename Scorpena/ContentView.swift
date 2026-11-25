@@ -13,7 +13,6 @@ struct ContentView: View {
     @State private var showAccessHint = false
     @State private var playlistStatus: String?
     @AppStorage("accessHintShown") private var accessHintShown = false
-    @State private var hoveringVersion = false
     @State private var launchSoundPlayer: AVAudioPlayer?
     @State private var shareAnchorView: NSView?
 
@@ -548,6 +547,9 @@ struct ContentView: View {
 
     /// Lines starting with «## » are section headings (Новое / Улучшения / Исправлено), the rest are bullets.
     static let changelog: [String: [String]] = [
+        "3.2.4": [
+            "**Исправления и улучшения:** устранение ошибок, повышение стабильности",
+        ],
         "3.2.3": [
             "## Улучшения",
             "**Обновление программы:** заметная полоса с кнопкой «Обновить» вверху окна",
@@ -658,33 +660,15 @@ struct ContentView: View {
 
     // MARK: Sections
 
-    /// Logo and name, centred. The version is a link to the list of changes.
+    /// Logo and name, centred. (The version number lives in «О программе».)
     private var brandRow: some View {
         HStack(spacing: 12) {
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
                 .frame(width: 50, height: 50)
             VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text("SCORPENA")
-                        .font(.title2.bold())
-                    if let version = Self.appVersionString {
-                        Button {
-                            WhatsNewPanel.shared.show(version: version, closeTitle: tr("Закрыть"), onAcknowledge: {})
-                        } label: {
-                            Text("(v.\(version))")
-                                .font(.caption2)
-                                .underline(hoveringVersion)
-                                .foregroundStyle(hoveringVersion ? Color.accentColor : Color.secondary)
-                        }
-                        .buttonStyle(.plain)
-                        .help(tr("Список изменений"))
-                        .onHover { inside in
-                            hoveringVersion = inside
-                            if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                        }
-                    }
-                }
+                Text("SCORPENA")
+                    .font(.title2.bold())
                 Text("video downloader")
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -1971,6 +1955,7 @@ enum DonateLink {
 
 struct AboutView: View {
     var onClose: () -> Void
+    @State private var hoveringVersion = false
 
     @ObservedObject private var languageSettings = LanguageSettings.shared
 
@@ -1982,7 +1967,25 @@ struct AboutView: View {
                         .resizable()
                         .frame(width: 60, height: 60)
                     VStack(alignment: .leading, spacing: 0) {
-                        Text("SCORPENA").font(.title2.bold())
+                        HStack(alignment: .firstTextBaseline, spacing: 5) {
+                            Text("SCORPENA").font(.title2.bold())
+                            if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
+                                Button {
+                                    WhatsNewPanel.shared.show(version: version, closeTitle: tr("Закрыть"), onAcknowledge: {})
+                                } label: {
+                                    Text("(v.\(version))")
+                                        .font(.caption)
+                                        .underline(hoveringVersion)
+                                        .foregroundStyle(hoveringVersion ? Color.accentColor : Color.secondary)
+                                }
+                                .buttonStyle(.plain)
+                                .help(tr("Список изменений"))
+                                .onHover { inside in
+                                    hoveringVersion = inside
+                                    if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                                }
+                            }
+                        }
                         Text("video downloader").font(.callout).foregroundStyle(.secondary)
                     }
                 }

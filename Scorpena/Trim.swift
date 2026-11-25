@@ -141,7 +141,7 @@ final class TrimModel: ObservableObject {
         // 3 seconds, so correcting a typo does not make anything happen halfway through.
         LinkField.clip.$text
             .removeDuplicates()
-            .map { [weak self] _ in (self?.previewReady ?? false) ? 3.0 : 0.7 }
+            .map { [weak self] _ in (self?.previewReady ?? false) ? 3.0 : 0.35 }
             .map { delay in Just(()).delay(for: .seconds(delay), scheduler: DispatchQueue.main) }
             .switchToLatest()
             .sink { [weak self] _ in self?.linkChanged() }

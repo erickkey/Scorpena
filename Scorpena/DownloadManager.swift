@@ -154,6 +154,10 @@ final class DownloadManager: ObservableObject {
     private var speedApplyWork: DispatchWorkItem?
     private(set) var downloadStartTime: Date?
     private var cookieQueue: [CookieSource] = []
+    /// YouTube refuses with its bot check even for signed-in cookies on some connections: as the very last try the
+    /// download asks through another of its player clients, which does not need the checks (it gives fewer, lower formats).
+    private var altYouTubeClient = false
+    private var triedAltYouTubeClient = false
     private var currentCookieSource: CookieSource = .none
     private var downloadAttempt = 0
     private var sawSafariPermissionBlock = false
@@ -714,6 +718,8 @@ final class DownloadManager: ObservableObject {
             browsers.insert(good, at: 0)
         }
         cookieQueue = [.none] + browsers
+        altYouTubeClient = false
+        triedAltYouTubeClient = false
 
         runNextDownloadAttempt()
     }
@@ -757,6 +763,7 @@ final class DownloadManager: ObservableObject {
             "--retry-sleep", "http:exp=1:20", "--retry-sleep", "fragment:exp=1:20",
             "--socket-timeout", "20",
         ] + SpeedLimit.ytDlpArgs(kbit: pendingSpeedLimit) + Self.jsRuntimeArgs()
+            + (altYouTubeClient ? ["--extractor-args", "youtube:player_client=android_vr"] : [])
         // A part of the video only: yt-dlp cuts it (exact to the frame — the edges are re-encoded).
         var clipTag = ""
         if let section = pendingSection, section.length > 0 {
@@ -823,7 +830,8 @@ final class DownloadManager: ObservableObject {
         // happens to use remembered cookies straight away.
         let startStatus = (downloadAttempt == 0)
             ? tr("Скачивание сейчас начнётся…")
-            : trf("Нужен вход, пробую %@…", source.describe)
+            : (altYouTubeClient ? tr("YouTube ограничил доступ, пробую другой способ…")
+                                : trf("Нужен вход, пробую %@…", source.describe))
 
         run(executableURL: URL(fileURLWithPath: ytDlp),
             arguments: arguments,
@@ -1303,6 +1311,16 @@ final class DownloadManager: ObservableObject {
                 return
             }
 
+            // Every way with cookies has failed on YouTube's bot check: one more try through another client.
+            if authWall, !sawSafariPermissionBlock, !triedAltYouTubeClient, Self.isYouTubeLink(pendingURL) {
+                triedAltYouTubeClient = true
+                altYouTubeClient = true
+                cookieQueue = [.none]
+                appendLog("note: пробую через другой клиент YouTube (формат может быть ниже)")
+                runNextDownloadAttempt()
+                return
+            }
+
             if authWall {
                 if !sawSafariPermissionBlock {
                     DiagnosticReporter.noteDownloadFailure(
@@ -1310,7 +1328,8 @@ final class DownloadManager: ObservableObject {
                         host: URL(string: pendingURL)?.host, log: log)
                 }
                 needsFullDiskAccess = sawSafariPermissionBlock
-                phase = .failed(Self.authWallMessage(fdaBlocked: sawSafariPermissionBlock))
+                phase = .failed(Self.isYouTubeLink(pendingURL) && Self.isBotCheck(l)
+                                ? Self.youTubeBotMessage() : Self.authWallMessage(fdaBlocked: sawSafariPermissionBlock))
                 statusLine = tr("Нужен вход в аккаунт")
                 return
             }
@@ -1345,6 +1364,17 @@ final class DownloadManager: ObservableObject {
         }
         if l.contains("requested format is not available") { return "не нашёлся формат" }
         return nil
+    }
+
+    static func isYouTubeLink(_ link: String) -> Bool {
+        guard let host = URL(string: link)?.host?.lowercased() else { return false }
+        return host == "youtu.be" || host == "youtube.com" || host.hasSuffix(".youtube.com")
+    }
+
+    static func isBotCheck(_ l: String) -> Bool { l.contains("confirm you") && l.contains("bot") }
+
+    static func youTubeBotMessage() -> String {
+        tr("Не удалось скачать видео с YouTube, он не открыл доступ к этому видео. Попробуй выключить VPN и повторить попытку.")
     }
 
     static func isAuthWall(_ l: String) -> Bool {
@@ -1398,6 +1428,7 @@ final class DownloadManager: ObservableObject {
             statusLine = status
         }
         if let size { statusLine += " · " + ContentView.formatBytes(size) }
+        if altYouTubeClient { statusLine += " · " + tr("Качество снижено: YouTube ограничил доступ") }
         downloadStartTime = nil
         lastDownloadedFile = file
         DiagnosticReporter.noteDownloadSuccess()

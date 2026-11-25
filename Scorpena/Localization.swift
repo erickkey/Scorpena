@@ -517,6 +517,26 @@ enum Translations {
             "This video requires being logged in. To grab cookies from your browser, the app needs disk access. Click “Open Settings”: find Scorpena in the list of apps and turn on “Full Disk Access” (if Scorpena isn't there, add it with the “+” button). Restart the app and try again.",
         "Для скачивания требуется вход в аккаунт:\n\nСайт отдаёт это видео только при входе в аккаунт. Войди на сайт в браузере и повтори. Например, Vimeo сейчас требует вход почти для всех роликов, даже открытых.":
             "Logging in is required to download this:\n\nThe site only serves this video to logged-in accounts. Log in to the site in your browser and try again. For example, Vimeo now requires login for almost all videos, even public ones.",
+        "Образ установки больше не нужен":
+            "The installer image is no longer needed",
+        "Программа установлена. Извлечь образ «%@» и убрать файл в Корзину?":
+            "The app is installed. Eject the “%@” image and move the file to the Trash?",
+        "Извлечь и убрать":
+            "Eject and Remove",
+        "Оставить":
+            "Keep",
+        "Найдена старая копия программы":
+            "An old copy of the app was found",
+        "На этом Mac осталась прежняя версия %@ в папке «%@». Из-за неё иногда открывается старая версия. Убрать её в Корзину?":
+            "An older version %@ is still on this Mac, in the “%@” folder. It can sometimes open instead of the new one. Move it to the Trash?",
+        "В Корзину":
+            "Move to Trash",
+        "YouTube ограничил доступ, пробую другой способ…":
+            "YouTube restricted access, trying another way…",
+        "Качество снижено: YouTube ограничил доступ":
+            "Quality reduced: YouTube restricted access",
+        "Не удалось скачать видео с YouTube, он не открыл доступ к этому видео. Попробуй выключить VPN и повторить попытку.":
+            "Couldn't download the video from YouTube, it didn't allow access to this video. Try turning off your VPN and trying again.",
         "Что-то пошло не так. Попробуй ещё раз или сообщи об ошибке. А пока попробуй другую ссылку.":
             "Something went wrong. Try again or report the problem. In the meantime, try a different link.",
         "%d с": "%d s",

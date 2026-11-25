@@ -102,6 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ToolAutoUpdater.recoverInterruptedSwap()
         DiagnosticReporter.reportPreviousCrashIfAny()
         DispatchQueue.main.asyncAfter(deadline: .now() + 25) { DiagnosticReporter.checkBundledTools() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { InstallCleanup.runAfterLaunch() }
         installEscapeToClose()
         // Windows that are open when the language is changed get their titles in the new language too.
         languageTitles = LanguageSettings.shared.$language.dropFirst().sink { _ in
