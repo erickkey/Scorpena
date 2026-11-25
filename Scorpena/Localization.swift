@@ -537,6 +537,10 @@ enum Translations {
             "Quality reduced: YouTube restricted access",
         "Не удалось скачать видео с YouTube, он не открыл доступ к этому видео. Попробуй выключить VPN и повторить попытку.":
             "Couldn't download the video from YouTube, it didn't allow access to this video. Try turning off your VPN and trying again.",
+        "%@ не отдаёт это видео, а обойти это не получилось. Нажми «Сообщить об ошибке»: разработчик получит подробности и разберётся.":
+            "%@ isn't serving this video, and the app couldn't get around it. Click “Report a problem”: the developer will get the details and look into it.",
+        "Сайт": "Site",
+        "Обновляю внутренние инструменты…": "Updating the built-in tools…",
         "Что-то пошло не так. Попробуй ещё раз или сообщи об ошибке. А пока попробуй другую ссылку.":
             "Something went wrong. Try again or report the problem. In the meantime, try a different link.",
         "%d с": "%d s",

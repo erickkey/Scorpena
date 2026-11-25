@@ -22,6 +22,8 @@ final class ToolAutoUpdater {
 
     private let lastCheckKey = "lastAutoToolUpdateCheck"
     private let skippedVersionKey = "autoUpdateSkippedYtDlpVersion"
+    private let skippedAtKey = "autoUpdateSkippedYtDlpAt"
+    private let lastRepairKey = "lastRepairToolUpdate"
     private let queue = DispatchQueue(label: "tool-auto-updater", qos: .utility)
     private var running = false                       // main thread only
 
@@ -60,6 +62,31 @@ final class ToolAutoUpdater {
             DispatchQueue.main.async {
                 self.running = false
                 if case .updated = outcome { completion() }
+            }
+        }
+    }
+
+    /// A rejected version is skipped for a day only: one bad self-check (a flaky network, a site hiccup) must not
+    /// keep the app on a broken build until the next release.
+    private func markSkipped(_ version: String) {
+        UserDefaults.standard.set(version, forKey: skippedVersionKey)
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: skippedAtKey)
+    }
+
+    /// A real download has just failed in the way an old yt-dlp fails (YouTube gave no files, its puzzle was not solved).
+    /// Then the self-check on a famous video does not outrank that: the newest release is installed even if it
+    /// failed the check (checksum and version are still verified). At most once in six hours. Main thread.
+    func repairNow(ytDlp: String, knownVersion: String?, completion: @escaping (Outcome) -> Void) {
+        let defaults = UserDefaults.standard
+        guard !running, ToolLocator.isBundled(ytDlp),
+              Date().timeIntervalSince1970 - defaults.double(forKey: lastRepairKey) > 6 * 3600 else { completion(.failed); return }
+        defaults.set(Date().timeIntervalSince1970, forKey: lastRepairKey)
+        running = true
+        queue.async { [self] in
+            let outcome = update(ytDlp: ytDlp, knownVersion: knownVersion, force: true)
+            DispatchQueue.main.async {
+                self.running = false
+                completion(outcome)
             }
         }
     }
@@ -113,7 +140,7 @@ final class ToolAutoUpdater {
     /// Starting a yt-dlp that macOS hasn't seen yet takes ~8 s once, so the
     /// installed version is passed in when it's already known and launches are
     /// kept to a minimum.
-    private func update(ytDlp: String, knownVersion: String?, stage: ((Stage) -> Void)? = nil) -> Outcome {
+    private func update(ytDlp: String, knownVersion: String?, force: Bool = false, stage: ((Stage) -> Void)? = nil) -> Outcome {
         let defaults = UserDefaults.standard
         let fm = FileManager.default
         stage?(.checking)
@@ -137,8 +164,9 @@ final class ToolAutoUpdater {
             log("up to date (installed \(current), latest stable \(latest))")
             return .upToDate(current)
         }
-        if defaults.string(forKey: skippedVersionKey) == latest {
-            log("skipping \(latest): it failed the self-check earlier")
+        if !force, defaults.string(forKey: skippedVersionKey) == latest,
+           Date().timeIntervalSince1970 - defaults.double(forKey: skippedAtKey) < 24 * 3600 {
+            log("skipping \(latest) for now: it failed the self-check earlier today")
             return .keptOld(current: current, rejected: latest)
         }
         log("updating \(current) -> \(latest)")
@@ -194,16 +222,20 @@ final class ToolAutoUpdater {
             log("new build reports \(reported ?? "nothing"), expected \(latest) — not installing")
             DiagnosticReporter.report(.ytDlpRolledBack,
                 details: "yt-dlp \(current) → \(latest): новая версия не запустилась (ответ: \(reported ?? "ничего")), осталась \(current).")
-            defaults.set(latest, forKey: skippedVersionKey)
+            markSkipped(latest)
             return .keptOld(current: current, rejected: latest)
         }
         if !canary(candidate) {
             let whyFailed = lastCanaryFailure      // what the new build said, before the old one is tried
-            if canary(ytDlp) {
+            if force {
+                log("\(latest) failed the self-check, but \(current) fails on a real video — installing \(latest) anyway")
+                DiagnosticReporter.report(.ytDlpRolledBack,
+                    details: "yt-dlp \(current) → \(latest): самопроверка не прошла, но на реальном видео не работает и \(current), поэтому новая версия поставлена.\nЧто ответила новая версия:\n\(whyFailed)")
+            } else if canary(ytDlp) {
                 log("\(latest) failed the self-check but \(current) works — keeping \(current)")
                 DiagnosticReporter.report(.ytDlpRolledBack,
                     details: "yt-dlp \(latest) не прошёл самопроверку на YouTube, а \(current) работает — остаётся \(current).\nЧто ответила новая версия:\n\(whyFailed)")
-                defaults.set(latest, forKey: skippedVersionKey)
+                markSkipped(latest)
                 return .keptOld(current: current, rejected: latest)
             }
             log("self-check failed for both versions (network or site problem) — installing \(latest) anyway")
@@ -221,7 +253,7 @@ final class ToolAutoUpdater {
             DiagnosticReporter.report(.ytDlpRolledBack,
                 details: "yt-dlp \(current) → \(latest): после замены файлов версия \(after ?? "не определилась"), откат.")
             swapBack(bin: bin, parked: parked)
-            defaults.set(latest, forKey: skippedVersionKey)
+            markSkipped(latest)
             return .keptOld(current: current, rejected: latest)
         }
         try? fm.removeItem(at: parked)
@@ -235,7 +267,13 @@ final class ToolAutoUpdater {
     private func canary(_ binary: String) -> Bool {
         let args = ["--no-warnings", "--no-playlist", "--skip-download", "--print", "%(title)s"]
             + DownloadManager.jsRuntimeArgs() + [Self.canaryURL]
-        guard let result = Self.run(binary, args, timeout: 90) else {
+        // One failure is not a verdict: YouTube answers differently from minute to minute. Asked twice.
+        var attempt = Self.run(binary, args, timeout: 90)
+        if attempt == nil || attempt!.status != 0 || attempt!.output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            Thread.sleep(forTimeInterval: 5)
+            attempt = Self.run(binary, args, timeout: 90)
+        }
+        guard let result = attempt else {
             lastCanaryFailure = "не удалось запустить"
             return false
         }

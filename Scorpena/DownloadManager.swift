@@ -158,6 +158,8 @@ final class DownloadManager: ObservableObject {
     /// download asks through another of its player clients, which does not need the checks (it gives fewer, lower formats).
     private var altYouTubeClient = false
     private var triedAltYouTubeClient = false
+    /// A failure that looks like an old yt-dlp triggers one forced update per download, then the download starts over.
+    private var triedRepairUpdate = false
     private var currentCookieSource: CookieSource = .none
     private var downloadAttempt = 0
     private var sawSafariPermissionBlock = false
@@ -697,6 +699,13 @@ final class DownloadManager: ObservableObject {
         transcodeOutput = nil
         transcodeDuration = nil
 
+        buildCookieQueue()
+
+        runNextDownloadAttempt()
+    }
+
+    /// The ordered list of ways to ask the site (no cookies first, then the browsers), for a fresh start of a download.
+    private func buildCookieQueue() {
         // Ordered list of things to try. Always start with no cookies — fast and
         // transparent for the vast majority of (public) videos. Only if that
         // fails do we reach for cookies, trying the browser that worked last
@@ -720,8 +729,7 @@ final class DownloadManager: ObservableObject {
         cookieQueue = [.none] + browsers
         altYouTubeClient = false
         triedAltYouTubeClient = false
-
-        runNextDownloadAttempt()
+        triedRepairUpdate = false
     }
 
     private func runNextDownloadAttempt() {
@@ -1311,6 +1319,28 @@ final class DownloadManager: ObservableObject {
                 return
             }
 
+            // YouTube gave no files or its puzzle was not solved: that is how an old yt-dlp fails. Update it now (even if the
+            // newest one failed the self-check earlier) and start the download over.
+            if (authWall || Self.isYouTubeNoFormats(l)), Self.isYouTubeLink(pendingURL), !triedRepairUpdate,
+               let tool = ytDlpPath, ToolLocator.isBundled(tool) {
+                triedRepairUpdate = true
+                statusLine = tr("Обновляю внутренние инструменты…")
+                appendLog("note: похоже на устаревший yt-dlp — обновляю и пробую ещё раз")
+                ToolAutoUpdater.shared.repairNow(ytDlp: tool, knownVersion: ytDlpVersion) { [weak self] outcome in
+                    guard let self else { return }
+                    if case .updated(_, let to) = outcome {
+                        self.ytDlpVersion = to
+                        self.appendLog("note: yt-dlp обновлён до \(to), начинаю заново")
+                        self.downloadAttempt = 0
+                        self.buildCookieQueue()
+                        self.runNextDownloadAttempt()
+                    } else {
+                        self.finish(status: status, reason: reason)      // nothing newer: the usual ending
+                    }
+                }
+                return
+            }
+
             // Every way with cookies has failed on YouTube's bot check: one more try through another client.
             if authWall, !sawSafariPermissionBlock, !triedAltYouTubeClient, Self.isYouTubeLink(pendingURL) {
                 triedAltYouTubeClient = true
@@ -1328,8 +1358,10 @@ final class DownloadManager: ObservableObject {
                         host: URL(string: pendingURL)?.host, log: log)
                 }
                 needsFullDiskAccess = sawSafariPermissionBlock
-                phase = .failed(Self.isYouTubeLink(pendingURL) && Self.isBotCheck(l)
-                                ? Self.youTubeBotMessage() : Self.authWallMessage(fdaBlocked: sawSafariPermissionBlock))
+                let onYouTube = Self.isYouTubeLink(pendingURL)
+                phase = .failed(onYouTube && Self.isYouTubeNoFormats(l) ? Self.siteRefusedMessage(pendingURL)
+                                : onYouTube && Self.isBotCheck(l) ? Self.youTubeBotMessage()
+                                : Self.authWallMessage(fdaBlocked: sawSafariPermissionBlock))
                 statusLine = tr("Нужен вход в аккаунт")
                 return
             }
@@ -1351,7 +1383,8 @@ final class DownloadManager: ObservableObject {
         }
         phase = .failed(isRestoredRun
             ? tr("Не удалось продолжить загрузку. Проверь ссылку или добавь её заново.")
-            : tr("Что-то пошло не так. Попробуй ещё раз или сообщи об ошибке. А пока попробуй другую ссылку."))
+            : (Self.siteGaveNoVideo(log.lowercased()) ? Self.siteRefusedMessage(pendingURL)
+               : tr("Что-то пошло не так. Попробуй ещё раз или сообщи об ошибке. А пока попробуй другую ссылку.")))
         statusLine = tr("Ошибка")
     }
 
@@ -1372,6 +1405,34 @@ final class DownloadManager: ObservableObject {
     }
 
     static func isBotCheck(_ l: String) -> Bool { l.contains("confirm you") && l.contains("bot") }
+
+    /// YouTube gave no video files at all (only pictures), or yt-dlp could not solve its «n»/signature puzzle:
+    /// the cause is on YouTube's side or in an old yt-dlp, not in the link.
+    static func isYouTubeNoFormats(_ l: String) -> Bool {
+        l.contains("only images are available") || l.contains("sabr") || l.contains("solving failed")
+    }
+
+    /// «YouTube» / «Vimeo» / the site's address: the same sentence serves every site that refuses the video.
+    static func siteName(_ link: String) -> String {
+        guard var host = URL(string: link)?.host?.lowercased() else { return tr("Сайт") }
+        for prefix in ["www.", "m."] where host.hasPrefix(prefix) { host.removeFirst(prefix.count) }
+        if host == "youtu.be" || host.hasSuffix("youtube.com") { return "YouTube" }
+        if host.hasSuffix("vimeo.com") { return "Vimeo" }
+        if host.hasSuffix("vk.com") || host.hasSuffix("vk.ru") || host.hasSuffix("vkvideo.ru") { return "VK" }
+        if host.hasSuffix("instagram.com") { return "Instagram" }
+        if host.hasSuffix("tiktok.com") { return "TikTok" }
+        return host
+    }
+
+    static func siteRefusedMessage(_ link: String) -> String {
+        trf("%@ не отдаёт это видео, а обойти это не получилось. Нажми «Сообщить об ошибке»: разработчик получит подробности и разберётся.", siteName(link))
+    }
+
+    /// The site answered, but with no video files in it (or yt-dlp could not read the page): not the user's to fix.
+    static func siteGaveNoVideo(_ l: String) -> Bool {
+        l.contains("no video formats found") || l.contains("only images are available")
+            || l.contains("unable to extract") || l.contains("sabr") || l.contains("solving failed")
+    }
 
     static func youTubeBotMessage() -> String {
         tr("Не удалось скачать видео с YouTube, он не открыл доступ к этому видео. Попробуй выключить VPN и повторить попытку.")

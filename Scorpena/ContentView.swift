@@ -10,6 +10,8 @@ struct ContentView: View {
     @StateObject private var windowFitter = MainWindowFitter()
     /// «Позже» on the update bar: it stays hidden until the next launch.
     @State private var updateBarDismissed = false
+    /// How far the content is pushed down by the update bar (the bar and the gap under it); the GitHub mark moves with it.
+    @State private var updateBarShift: CGFloat = 0
     @State private var showAccessHint = false
     @State private var playlistStatus: String?
     @AppStorage("accessHintShown") private var accessHintShown = false
@@ -159,9 +161,11 @@ struct ContentView: View {
                 })
         }
         .onPreferenceChange(ContentHeightKey.self) { windowFitter.fit(toContent: $0) }
+        .onPreferenceChange(UpdateBarShiftKey.self) { updateBarShift = $0 }
         .overlay(alignment: .topTrailing) {
             // The centre of the icon is 22.5 pt from the window's edge: exactly under the sun / moon.
-            GitHubLinkButton().padding(.top, 8).padding(.trailing, 12.5)
+            // With the update bar above everything, it stays beside the logo as before (the bar pushes both down).
+            GitHubLinkButton().padding(.top, 8 + updateBarShift).padding(.trailing, 12.5)
         }
         .modifier(MenuWindowOpeners(manager: manager, urlString: $urlString))
         .toolbar {
@@ -310,7 +314,11 @@ struct ContentView: View {
 
     private func mainContent(spacing: CGFloat) -> some View {
         VStack(spacing: 18) {
-            if updateChecker.updateAvailable && !updateBarDismissed { updateBar }
+            if updateChecker.updateAvailable && !updateBarDismissed {
+                updateBar.background(GeometryReader { proxy in
+                    Color.clear.preference(key: UpdateBarShiftKey.self, value: proxy.size.height + 18)
+                })
+            }
             brandRow
             VStack(spacing: 14) {
                 urlField
@@ -1153,6 +1161,11 @@ struct ContentView: View {
 
 /// Height of the main column's content, reported up so the window can grow
 /// when something (an error message, a banner) makes it taller than the window.
+private struct UpdateBarShiftKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
 private struct ContentHeightKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
